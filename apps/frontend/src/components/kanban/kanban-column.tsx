@@ -17,14 +17,14 @@ export default function KanbanColumn({ column }: Props) {
 	const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
 	return (
-		<div className="min-w-[300px]">
+		<div className="min-w-[300px] md:min-w-0">
 			<Card
-				className={`rounded-2xl transition-colors ${
+				className={`flex flex-col rounded-2xl transition-colors max-h-[calc(100vh-100px)] ${
 					isOver ? "bg-indigo-50 border-indigo-300 border-2" : ""
 				}`}
 			>
-				<CardHeader>
-					<div className="flex items-center justify-between p-4">
+				<CardHeader className="shrink-0">
+					<div className="flex items-center justify-between p-4 pb-0">
 						<div>
 							<div className="font-semibold">{column.title}</div>
 							<div className="text-xs text-muted-foreground">
@@ -34,16 +34,21 @@ export default function KanbanColumn({ column }: Props) {
 					</div>
 				</CardHeader>
 
-				<CardContent ref={setNodeRef} className="p-4 min-h-[100px]">
+				<CardContent
+					ref={setNodeRef}
+					className="p-4 pt-0 overflow-y-auto min-h-[100px]"
+				>
 					<SortableContext
 						items={column.items.map((i) => i.id)}
 						strategy={verticalListSortingStrategy}
 					>
-						<AnimatePresence>
-							{column.items.map((item) => (
-								<SortableCard key={item.id} item={item} />
-							))}
-						</AnimatePresence>
+						<div className="space-y-3">
+							<AnimatePresence>
+								{column.items.map((item) => (
+									<SortableCard key={item.id} item={item} />
+								))}
+							</AnimatePresence>
+						</div>
 					</SortableContext>
 
 					{column.items.length === 0 && (

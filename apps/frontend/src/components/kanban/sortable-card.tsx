@@ -32,7 +32,7 @@ export default function SortableCard({ item }: Props) {
 			initial={{ opacity: 0, y: 6 }}
 			animate={{ opacity: 1, y: 0 }}
 			exit={{ opacity: 0, scale: 0.98 }}
-			className="bg-white rounded-2xl shadow-sm p-3 mb-3 cursor-grab"
+			className="bg-white rounded-2xl shadow-sm p-3 mb-3 cursor-grab hover:shadow-md hover:bg-slate-50 hover:scale-[1.02] transition-all duration-200"
 			{...attributes}
 			{...listeners}
 		>
