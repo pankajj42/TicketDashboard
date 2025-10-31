@@ -1,3 +1,5 @@
+import { generateId } from "@repo/shared";
+
 export type CardItem = {
 	id: string;
 	title: string;
@@ -10,8 +12,7 @@ export type Column = {
 	items: CardItem[];
 };
 
-export const uid = (prefix = "id") =>
-	`${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+export const uid = (prefix = "id") => `${prefix}_${generateId()}`;
 
 export const DEFAULT_BOARD: Column[] = [
 	{

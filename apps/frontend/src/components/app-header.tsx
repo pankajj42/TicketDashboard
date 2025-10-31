@@ -5,6 +5,7 @@ import { type Column } from "./kanban/kanban-utils";
 import CreateTicket from "./create-ticket";
 import UserActions from "./user-actions";
 import { ThemeToggle } from "./theme-toggle";
+import { title } from "@repo/shared";
 
 type AppHeaderProps = {
 	columns: Column[];
@@ -27,7 +28,7 @@ export default function AppHeader({ columns, onAddCard }: AppHeaderProps) {
 						<span className="sr-only">Toggle Sidebar</span>
 					</Button>
 					<h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
-						Project Board
+						{title}
 					</h1>
 				</div>
 
