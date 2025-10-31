@@ -80,7 +80,7 @@ export default function KanbanBoard({ columns, setColumns }: KanbanBoardProps) {
 	}
 
 	return (
-		<div className="flex-1 p-4 bg-slate-50 overflow-y-auto md:overflow-hidden">
+		<div className="flex-1 p-4 bg-gray-200 dark:bg-gray-900 overflow-y-auto md:overflow-hidden">
 			<DndContext
 				sensors={sensors}
 				collisionDetection={closestCenter}
@@ -102,8 +102,8 @@ export default function KanbanBoard({ columns, setColumns }: KanbanBoardProps) {
 				{createPortal(
 					<DragOverlay>
 						{activeCard ? (
-							<div className="bg-indigo-50 border-2 border-indigo-300 rounded-2xl p-3 shadow-lg opacity-95">
-								<div className="font-medium">
+							<div className="bg-gray-100 dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-2xl p-3 shadow-lg opacity-95">
+								<div className="font-medium text-gray-900 dark:text-gray-100">
 									{activeCard.title}
 								</div>
 							</div>

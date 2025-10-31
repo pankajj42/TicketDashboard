@@ -4,6 +4,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./components/app-sidebar";
 import AppHeader from "./components/app-header";
 import KanbanBoard from "./components/kanban/kanban-board";
+import { ThemeProvider } from "./components/theme-provider";
 import {
 	DEFAULT_BOARD,
 	type Column,
@@ -27,13 +28,15 @@ function App() {
 	}
 
 	return (
-		<SidebarProvider>
-			<AppSidebar />
-			<main className="h-screen w-full flex flex-col">
-				<AppHeader columns={columns} onAddCard={handleAddCard} />
-				<KanbanBoard columns={columns} setColumns={setColumns} />
-			</main>
-		</SidebarProvider>
+		<ThemeProvider defaultTheme="light" storageKey="ticket-dashboard-theme">
+			<SidebarProvider>
+				<AppSidebar />
+				<main className="h-screen w-full flex flex-col">
+					<AppHeader columns={columns} onAddCard={handleAddCard} />
+					<KanbanBoard columns={columns} setColumns={setColumns} />
+				</main>
+			</SidebarProvider>
+		</ThemeProvider>
 	);
 }
 

@@ -37,29 +37,29 @@ export function AppSidebar() {
 
 	return (
 		<Sidebar>
-			<SidebarHeader>
-				<div className="flex items-center gap-3 mb-3 p-3 bg-white rounded-lg shadow-sm">
+			<SidebarHeader className="bg-gray-50 dark:bg-gray-950">
+				<div className="flex items-center gap-3 mb-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
 					<div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
 						<span className="text-white font-bold text-xl">TD</span>
 					</div>
 					<div className="flex-1 min-w-0">
-						<div className="font-bold text-gray-800 text-lg">
+						<div className="font-bold text-gray-800 dark:text-gray-100 text-lg">
 							TicketDash
 						</div>
-						<div className="text-sm text-gray-600 truncate">
+						<div className="text-sm text-gray-600 dark:text-gray-300 truncate">
 							Username
 						</div>
 					</div>
 				</div>
 			</SidebarHeader>
-			<SidebarContent>
+			<SidebarContent className="custom-scrollbar bg-gray-50 dark:bg-gray-950">
 				<SidebarHeader>
-					<div className="px-3 text-lg font-semibold text-gray-500">
+					<div className="px-3 text-lg font-semibold text-gray-500 dark:text-gray-400">
 						Projects
 					</div>
 				</SidebarHeader>
 				<SidebarGroup>
-					<SidebarGroupContent>
+					<SidebarGroupContent className="custom-scrollbar">
 						<SidebarMenu>
 							{items.map((item, index) => (
 								<SidebarMenuItem key={item.title}>

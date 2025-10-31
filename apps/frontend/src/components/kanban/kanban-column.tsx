@@ -19,15 +19,19 @@ export default function KanbanColumn({ column }: Props) {
 	return (
 		<div className="min-w-[300px] md:min-w-0">
 			<Card
-				className={`flex flex-col rounded-2xl transition-colors max-h-[calc(100vh-100px)] ${
-					isOver ? "bg-indigo-50 border-indigo-300 border-2" : ""
+				className={`flex flex-col rounded-2xl transition-colors max-h-[calc(100vh-100px)] bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 shadow-sm ${
+					isOver
+						? "bg-green-100 dark:bg-green-900/20 border-green-400 dark:border-green-500 border-2 shadow-md"
+						: ""
 				}`}
 			>
 				<CardHeader className="shrink-0">
 					<div className="flex items-center justify-between p-4 pb-0">
 						<div>
-							<div className="font-semibold">{column.title}</div>
-							<div className="text-xs text-muted-foreground">
+							<div className="font-semibold text-gray-800 dark:text-gray-100">
+								{column.title}
+							</div>
+							<div className="text-xs text-gray-600 dark:text-gray-400">
 								{column.items.length} items
 							</div>
 						</div>
@@ -36,7 +40,7 @@ export default function KanbanColumn({ column }: Props) {
 
 				<CardContent
 					ref={setNodeRef}
-					className="p-4 pt-0 overflow-y-auto min-h-[100px]"
+					className="p-4 pt-0 overflow-y-auto min-h-[100px] custom-scrollbar"
 				>
 					<SortableContext
 						items={column.items.map((i) => i.id)}
@@ -52,7 +56,7 @@ export default function KanbanColumn({ column }: Props) {
 					</SortableContext>
 
 					{column.items.length === 0 && (
-						<div className="text-sm text-muted-foreground mt-2">
+						<div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
 							Drop cards here
 						</div>
 					)}

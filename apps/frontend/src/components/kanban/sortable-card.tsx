@@ -21,7 +21,7 @@ export default function SortableCard({ item }: Props) {
 		transform: CSS.Transform.toString(transform),
 		transition,
 		opacity: isDragging ? 0.35 : 1,
-		border: isDragging ? "2px solid #7c3aed" : "1px solid #e6e7eb",
+		border: isDragging ? "2px solid #6b7280" : "1px solid #e6e7eb",
 	};
 
 	return (
@@ -32,13 +32,15 @@ export default function SortableCard({ item }: Props) {
 			initial={{ opacity: 0, y: 6 }}
 			animate={{ opacity: 1, y: 0 }}
 			exit={{ opacity: 0, scale: 0.98 }}
-			className="bg-white rounded-2xl shadow-sm p-3 mb-3 cursor-grab hover:shadow-md hover:bg-slate-50 hover:scale-[1.02] transition-all duration-200"
+			className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-3 mb-3 cursor-grab hover:shadow-md hover:bg-gray-50 dark:hover:bg-gray-750 hover:scale-[1.02] transition-all duration-200 border border-gray-300 dark:border-gray-700"
 			{...attributes}
 			{...listeners}
 		>
-			<div className="font-medium">{item.title}</div>
+			<div className="font-medium text-gray-800 dark:text-gray-100">
+				{item.title}
+			</div>
 			{item.description ? (
-				<div className="text-sm text-muted-foreground mt-1">
+				<div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
 					{item.description}
 				</div>
 			) : null}
