@@ -1,0 +1,137 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TicketStatus {
+  PROPOSED
+  TODO
+  INPROGRESS
+  DONE
+  DEPLOYED
+}
+
+enum UpdateType {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  ASSIGNMENT_CHANGED
+  COMMENT
+}
+
+model User {
+  id          String         @id @default(uuid())
+  email       String         @unique
+  username    String         @unique
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relations
+  createdTickets     Ticket[]       @relation("TicketCreator")
+  assignedTickets    Ticket[]       @relation("TicketAssignee")
+  ticketUpdates      TicketUpdate[] @relation("TicketUpdateUser")
+  projectsSubscribed Project[]      @relation("ProjectSubscribers")
+  notifications      Notification[] @relation("NotificationRecipient")
+
+  @@map("users")
+  @@index([username])
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tickets     Ticket[] @relation("ProjectTickets")
+  subscribers User[]   @relation("ProjectSubscribers")
+  notifications Notification[] @relation("ProjectCreationNotifications")
+
+  @@map("projects")
+}
+
+model Ticket {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  status      TicketStatus @default(PROPOSED)
+  
+  projectId   String
+  createdById String
+  assignedToId String?
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  project     Project        @relation("ProjectTickets", fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User           @relation("TicketCreator", fields: [createdById], references: [id])
+  assignedTo  User?          @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  updates     TicketUpdate[] @relation("TicketUpdates")
+
+  @@map("tickets")
+  @@index([projectId])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([status])
+}
+
+model TicketUpdate {
+  id           String      @id @default(uuid())
+  createdAt    DateTime    @default(now())
+
+  ticketId     String
+  updatedById  String
+  type         UpdateType
+  content      String      // JSON string containing update details
+  oldStatus    TicketStatus?
+  newStatus    TicketStatus?
+  oldAssignedToId String?
+  newAssignedToId String?
+
+  // Relations
+  ticket        Ticket         @relation("TicketUpdates", fields: [ticketId], references: [id], onDelete: Cascade)
+  updatedBy     User           @relation("TicketUpdateUser", fields: [updatedById], references: [id])
+  notifications Notification[] @relation("TicketUpdateNotifications")
+
+  @@map("ticket_updates")
+  @@index([ticketId])
+  @@index([updatedById])
+  @@index([createdAt])
+}
+
+model Notification {
+  id             String       @id @default(uuid())
+  createdAt      DateTime     @default(now())
+
+  recipientId    String
+  message        String
+  read           Boolean      @default(false)
+
+  ticketUpdateId   String?
+  projectCreatedId String?
+
+  // Relations
+  recipient      User          @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  ticketUpdate   TicketUpdate? @relation("TicketUpdateNotifications", fields: [ticketUpdateId], references: [id], onDelete: Cascade)
+  project        Project?      @relation("ProjectCreationNotifications", fields: [projectCreatedId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+  @@index([recipientId])
+  @@index([ticketUpdateId])
+  @@index([read])
+  @@index([createdAt])
+}
