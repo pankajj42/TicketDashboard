@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { UserAuthService } from "../services/auth.service.js";
+import { UserAuthService } from "../services/user.auth.service.js";
 import { ErrorHandler } from "../utils/error-handler.js";
 import { ResponseHelper } from "../utils/response-helper.js";
 import type {
