@@ -1,19 +1,12 @@
-import { PrismaClient } from "../generated/prisma/client.js";
+import { prisma } from "../lib/prisma.js";
 
 export abstract class BaseRepository {
-	protected prisma: PrismaClient;
-
-	constructor(prismaClient: PrismaClient) {
-		this.prisma = prismaClient;
-		this.prisma.$connect();
+	protected static get prisma() {
+		return prisma;
 	}
 
-	protected handleError(error: unknown, operation: string): void {
+	protected static handleError(error: unknown, operation: string): void {
 		console.error(`Repository Error during ${operation}:`, error);
 		throw error;
-	}
-
-	async disconnect(): Promise<void> {
-		await this.prisma.$disconnect();
 	}
 }

@@ -1,9 +1,10 @@
 import type { User, Prisma } from "../generated/prisma/client.js";
-import { prisma } from "../lib/prisma.js";
+import { BaseRepository } from "./base.repository.js";
+import crypto from "crypto";
 
-export class UserRepository {
+export class UserRepository extends BaseRepository {
 	static async findByEmail(email: string): Promise<User | null> {
-		return prisma.user.findUnique({
+		return super.prisma.user.findUnique({
 			where: {
 				email,
 				isActive: true, // Only return active users
@@ -12,7 +13,7 @@ export class UserRepository {
 	}
 
 	static async findById(id: string): Promise<User | null> {
-		return prisma.user.findUnique({
+		return super.prisma.user.findUnique({
 			where: {
 				id,
 				isActive: true, // Only return active users
@@ -28,82 +29,45 @@ export class UserRepository {
 			lastLoginAt: new Date(),
 		};
 
-		return prisma.user.create({ data });
+		return super.prisma.user.create({ data });
 	}
 
 	static async update(
 		id: string,
 		data: Prisma.UserUpdateInput
 	): Promise<User> {
-		return prisma.user.update({
+		return super.prisma.user.update({
 			where: { id },
 			data,
 		});
 	}
 
 	static async updateLastLogin(id: string): Promise<User> {
-		return prisma.user.update({
+		return super.prisma.user.update({
 			where: { id },
 			data: { lastLoginAt: new Date() },
 		});
 	}
 
 	static async delete(id: string): Promise<User> {
-		return prisma.user.delete({
+		return super.prisma.user.delete({
 			where: { id },
 		});
 	}
 
 	static async existsByEmail(email: string): Promise<boolean> {
-		const user = await prisma.user.findUnique({
+		const user = await super.prisma.user.findUnique({
 			where: { email },
 			select: { id: true },
 		});
 		return !!user;
-	}
-
-	static async existsByUsername(username: string): Promise<boolean> {
-		const user = await prisma.user.findUnique({
-			where: { username },
-			select: { id: true },
-		});
-		return !!user;
-	}
-
-	// Admin methods - can access inactive users
-	static async findByEmailIncludeInactive(
-		email: string
-	): Promise<User | null> {
-		return prisma.user.findUnique({
-			where: { email },
-		});
-	}
-
-	static async findByIdIncludeInactive(id: string): Promise<User | null> {
-		return prisma.user.findUnique({
-			where: { id },
-		});
-	}
-
-	static async deactivateUser(id: string): Promise<User> {
-		return prisma.user.update({
-			where: { id },
-			data: { isActive: false },
-		});
-	}
-
-	static async activateUser(id: string): Promise<User> {
-		return prisma.user.update({
-			where: { id },
-			data: { isActive: true },
-		});
 	}
 
 	// Helper: Generate username from email
 	private static generateUsernameFromEmail(email: string): string {
 		const emailParts = email.split("@");
 		const base = (emailParts[0] || "user").toLowerCase();
-		const randomSuffix = Math.floor(Math.random() * 9000) + 1000;
+		const randomSuffix = crypto.randomInt(1000, 9999);
 		return `${base}${randomSuffix}`;
 	}
 }

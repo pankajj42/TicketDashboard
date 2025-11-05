@@ -1,5 +1,4 @@
 import { SessionService } from "../services/session.service.js";
-import { OtpService } from "../services/otp.service.js";
 
 export class CleanupService {
 	private static isRunning = false;
@@ -53,20 +52,15 @@ export class CleanupService {
 			// Clean up expired refresh tokens
 			const deletedTokens = await SessionService.cleanupExpiredSessions();
 
-			// Clean up expired OTP codes
-			const deletedOtps = await OtpService.cleanupAllExpiredOtps();
-
 			const duration = Date.now() - startTime;
 
 			console.log(`✅ Cleanup completed in ${duration}ms:`);
 			console.log(`   - Deleted ${deletedTokens} expired refresh tokens`);
-			console.log(`   - Deleted ${deletedOtps} expired OTP codes`);
 
 			// Log metrics for monitoring
 			this.logCleanupMetrics({
 				duration,
 				deletedTokens,
-				deletedOtps,
 				timestamp: new Date(),
 			});
 		} catch (error) {
@@ -81,7 +75,6 @@ export class CleanupService {
 	private static logCleanupMetrics(metrics: {
 		duration: number;
 		deletedTokens: number;
-		deletedOtps: number;
 		timestamp: Date;
 	}): void {
 		// In production, this could send metrics to:
@@ -93,7 +86,6 @@ export class CleanupService {
 		console.log("📊 Cleanup metrics:", {
 			duration_ms: metrics.duration,
 			deleted_tokens: metrics.deletedTokens,
-			deleted_otps: metrics.deletedOtps,
 			timestamp: metrics.timestamp.toISOString(),
 		});
 	}

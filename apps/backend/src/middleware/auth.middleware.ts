@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { JwtService } from "../services/jwt.service.js";
 import { SessionService } from "../services/session.service.js";
 import { UserRepository } from "../repositories/user.repository.js";
+import { ErrorHandler } from "../utils/error-handler.js";
 import type { AccessTokenPayload, ApiErrorResponse } from "@repo/shared";
 
 // Enhanced user data for request object
@@ -20,92 +21,51 @@ declare global {
 	}
 }
 
-// Authentication middleware - requires valid access token
+/**
+ * Main authentication middleware - requires valid access token
+ */
 export const authenticateToken = async (
 	req: Request,
 	res: Response<ApiErrorResponse>,
 	next: NextFunction
 ): Promise<void> => {
 	try {
-		const authHeader = req.headers.authorization;
-		const token = JwtService.extractBearerToken(authHeader);
+		const token = extractBearerToken(req);
 
 		if (!token) {
-			res.status(401).json({
-				error: "Access token required",
-				code: "MISSING_TOKEN",
-			});
+			ErrorHandler.handleAuthError(
+				res,
+				"Access token required",
+				"MISSING_TOKEN"
+			);
 			return;
 		}
 
-		// Validate session
-		const payload = await SessionService.validateSession(token);
-
-		if (!payload) {
-			res.status(401).json({
-				error: "Invalid or expired access token",
-				code: "INVALID_TOKEN",
-			});
-			return;
-		}
-
-		// Fetch fresh user data from database (JWT only has userId)
-		const user = await UserRepository.findById(payload.userId);
+		const user = await validateTokenAndGetUser(token);
 
 		if (!user) {
-			res.status(401).json({
-				error: "User not found or inactive",
-				code: "USER_NOT_FOUND",
-			});
+			ErrorHandler.handleAuthError(
+				res,
+				"Invalid or expired access token",
+				"INVALID_TOKEN"
+			);
 			return;
 		}
 
-		// Attach user info to request (JWT payload + DB data)
-		req.user = {
-			...payload,
-			email: user.email,
-			username: user.username,
-		};
-		req.sessionId = payload.sessionId;
+		// Attach user info to request
+		req.user = user;
+		req.sessionId = user.sessionId;
 
 		next();
 	} catch (error) {
-		console.error("Authentication error:", error);
-
-		if (error instanceof Error) {
-			switch (error.message) {
-				case "ACCESS_TOKEN_EXPIRED":
-					res.status(401).json({
-						error: "Access token expired",
-						code: "TOKEN_EXPIRED",
-					});
-					return;
-
-				case "INVALID_ACCESS_TOKEN":
-					res.status(401).json({
-						error: "Invalid access token format",
-						code: "INVALID_TOKEN_FORMAT",
-					});
-					return;
-
-				default:
-					res.status(401).json({
-						error: "Authentication failed",
-						code: "AUTH_FAILED",
-					});
-					return;
-			}
-		}
-
-		res.status(500).json({
-			error: "Internal server error during authentication",
-			code: "INTERNAL_ERROR",
-		});
+		handleAuthMiddlewareError(res, error);
 	}
 };
 
-// Rate limiting middleware for auth endpoints
-export const authRateLimit = (
+/**
+ * Rate limiting middleware for authentication endpoints
+ */
+export const createAuthRateLimit = (
 	maxAttempts: number = 5,
 	windowMs: number = 15 * 60 * 1000 // 15 minutes
 ) => {
@@ -116,15 +76,11 @@ export const authRateLimit = (
 		res: Response<ApiErrorResponse>,
 		next: NextFunction
 	): void => {
-		const clientId = req.ip || "unknown";
+		const clientId = getClientIdentifier(req);
 		const now = Date.now();
 
-		// Clean up expired entries
-		for (const [key, value] of attempts.entries()) {
-			if (now > value.resetTime) {
-				attempts.delete(key);
-			}
-		}
+		// Clean expired entries
+		cleanExpiredAttempts(attempts, now);
 
 		const userAttempts = attempts.get(clientId);
 
@@ -138,10 +94,7 @@ export const authRateLimit = (
 			const timeLeft = Math.ceil(
 				(userAttempts.resetTime - now) / 1000 / 60
 			);
-			res.status(429).json({
-				error: `Too many authentication attempts. Try again in ${timeLeft} minutes`,
-				code: "RATE_LIMIT_EXCEEDED",
-			});
+			ErrorHandler.handleRateLimitError(res, timeLeft);
 			return;
 		}
 
@@ -150,7 +103,28 @@ export const authRateLimit = (
 	};
 };
 
-// Middleware to validate device info in request
+/**
+ * Middleware to require user authentication
+ */
+export const requireAuth = (
+	req: Request,
+	res: Response<ApiErrorResponse>,
+	next: NextFunction
+): void => {
+	if (!req.user) {
+		ErrorHandler.handleAuthError(
+			res,
+			"Authentication required",
+			"NOT_AUTHENTICATED"
+		);
+		return;
+	}
+	next();
+};
+
+/**
+ * Middleware to validate device information
+ */
 export const validateDeviceInfo = (
 	req: Request,
 	res: Response<ApiErrorResponse>,
@@ -159,52 +133,120 @@ export const validateDeviceInfo = (
 	const userAgent = req.headers["user-agent"];
 
 	if (!userAgent) {
-		res.status(400).json({
-			error: "User-Agent header required",
-			code: "MISSING_USER_AGENT",
-		});
+		ErrorHandler.handleBadRequestError(
+			res,
+			"User-Agent header required",
+			"MISSING_USER_AGENT"
+		);
 		return;
 	}
 
 	// Attach device info to request
 	(req as any).deviceInfo = {
 		userAgent,
-		ipAddress: req.ip || "unknown",
+		ipAddress: getClientIdentifier(req),
 		deviceName: req.body.deviceInfo?.deviceName,
+		deviceFingerprint: req.body.deviceInfo?.deviceFingerprint,
 	};
 
 	next();
 };
 
-// Error handler for authentication routes
-export const authErrorHandler = (
-	error: Error,
-	req: Request,
+// ===== HELPER FUNCTIONS =====
+
+/**
+ * Extract bearer token from request headers
+ */
+function extractBearerToken(req: Request): string | null {
+	const authHeader = req.headers.authorization;
+	return JwtService.extractBearerToken(authHeader);
+}
+
+/**
+ * Validate token and return user data
+ */
+async function validateTokenAndGetUser(
+	token: string
+): Promise<RequestUser | null> {
+	// Validate session
+	const payload = await SessionService.validateSession(token);
+	if (!payload) return null;
+
+	// Fetch fresh user data from database
+	const user = await UserRepository.findById(payload.userId);
+	if (!user) return null;
+
+	return {
+		...payload,
+		email: user.email,
+		username: user.username,
+	};
+}
+
+/**
+ * Get client identifier for rate limiting
+ */
+function getClientIdentifier(req: Request): string {
+	return (
+		req.ip ||
+		req.connection?.remoteAddress ||
+		req.socket?.remoteAddress ||
+		req.headers?.["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
+		"unknown"
+	);
+}
+
+/**
+ * Clean expired rate limit attempts
+ */
+function cleanExpiredAttempts(
+	attempts: Map<string, { count: number; resetTime: number }>,
+	now: number
+): void {
+	for (const [key, value] of attempts.entries()) {
+		if (now > value.resetTime) {
+			attempts.delete(key);
+		}
+	}
+}
+
+/**
+ * Handle authentication middleware errors
+ */
+function handleAuthMiddlewareError(
 	res: Response<ApiErrorResponse>,
-	next: NextFunction
-): void => {
-	console.error("Auth route error:", error);
+	error: unknown
+): void {
+	console.error("Authentication middleware error:", error);
 
-	// Handle specific auth errors
-	if (error.message.includes("OTP")) {
-		res.status(400).json({
-			error: error.message,
-			code: "OTP_ERROR",
-		});
-		return;
+	if (error instanceof Error) {
+		switch (error.message) {
+			case "ACCESS_TOKEN_EXPIRED":
+				ErrorHandler.handleAuthError(
+					res,
+					"Access token expired",
+					"TOKEN_EXPIRED"
+				);
+				return;
+			case "INVALID_ACCESS_TOKEN":
+				ErrorHandler.handleAuthError(
+					res,
+					"Invalid access token format",
+					"INVALID_TOKEN_FORMAT"
+				);
+				return;
+			default:
+				ErrorHandler.handleAuthError(
+					res,
+					"Authentication failed",
+					"AUTH_FAILED"
+				);
+				return;
+		}
 	}
 
-	if (error.message.includes("session") || error.message.includes("token")) {
-		res.status(401).json({
-			error: error.message,
-			code: "SESSION_ERROR",
-		});
-		return;
-	}
-
-	// Generic error response
-	res.status(500).json({
-		error: "Authentication service error",
-		code: "AUTH_SERVICE_ERROR",
-	});
-};
+	ErrorHandler.handleInternalError(
+		res,
+		"Internal server error during authentication"
+	);
+}

@@ -1,10 +1,7 @@
 import { Request, Response } from "express";
-import { z } from "zod";
-import { OtpService } from "../services/otp.service.js";
-import { SessionService } from "../services/session.service.js";
-import { UserRepository } from "../repositories/user.repository.js";
-import config from "../config/env.js";
-import crypto from "crypto";
+import { UserAuthService } from "../services/auth.service.js";
+import { ErrorHandler } from "../utils/error-handler.js";
+import { ResponseHelper } from "../utils/response-helper.js";
 import type {
 	LoginRequest,
 	LoginResponse,
@@ -25,7 +22,9 @@ import {
 } from "@repo/shared";
 
 export class AuthController {
-	// POST /api/auth/login - Send OTP to email
+	/**
+	 * POST /api/auth/login - Send OTP to email
+	 */
 	static async login(
 		req: Request<{}, {}, LoginRequest>,
 		res: Response<LoginResponse | ApiErrorResponse>
@@ -33,120 +32,77 @@ export class AuthController {
 		try {
 			const { email } = LoginSchema.parse(req.body);
 
-			const result = await OtpService.generateAndSendOtp(email);
+			const result = await UserAuthService.sendLoginOtp(email);
 
 			if (!result.success) {
-				res.status(400).json({
-					error: result.message,
-					code: "OTP_GENERATION_FAILED",
-				});
+				ErrorHandler.handleBadRequestError(
+					res,
+					result.message,
+					"OTP_GENERATION_FAILED"
+				);
 				return;
 			}
 
-			res.json({
-				message: "OTP sent to your email",
+			ResponseHelper.sendSuccess(res, {
+				message: result.message,
 				otpSent: true,
 			});
 		} catch (error) {
-			console.error("Login error:", error);
-
-			if (error instanceof z.ZodError) {
-				res.status(400).json({
-					error: "Invalid request data",
-					code: "VALIDATION_ERROR",
-					details: error.issues,
-				});
-				return;
-			}
-
-			res.status(500).json({
-				error: "Failed to send OTP",
-				code: "INTERNAL_ERROR",
-			});
+			ErrorHandler.handleError(res, error, "send login OTP");
 		}
 	}
 
-	// POST /api/auth/verify-otp - Verify OTP and create session
+	/**
+	 * POST /api/auth/verify-otp - Verify OTP and create session
+	 */
 	static async verifyOtp(
 		req: Request<{}, {}, VerifyOtpRequest>,
 		res: Response<VerifyOtpResponse | ApiErrorResponse>
 	): Promise<void> {
 		try {
 			const { email, otp, deviceInfo } = VerifyOtpSchema.parse(req.body);
-			const ipAddress = req.ip || "unknown";
+			const deviceData = ResponseHelper.extractDeviceInfo(req);
 
-			// Verify OTP
-			const otpResult = await OtpService.verifyOtp(email, otp);
+			const result = await UserAuthService.verifyOtpAndAuthenticate(
+				email,
+				otp,
+				{
+					userId: "", // Will be set in service
+					userAgent: deviceData.userAgent,
+					ipAddress: deviceData.ipAddress,
+					deviceName: deviceInfo.deviceName || deviceData.deviceName,
+					deviceFingerprint: deviceData.deviceFingerprint,
+				}
+			);
 
-			if (!otpResult.success) {
-				res.status(400).json({
-					error: otpResult.message || "Invalid OTP",
-					code: "INVALID_OTP",
-				});
+			if (!result.success || !result.user || !result.accessToken) {
+				ErrorHandler.handleBadRequestError(
+					res,
+					result.message || "Invalid OTP",
+					"INVALID_OTP"
+				);
 				return;
 			}
 
-			// Get or create user (moved from OTP service)
-			let user = await UserRepository.findByEmail(email);
-			let isNewUser = false;
-
-			if (!user) {
-				isNewUser = true;
-				const username =
-					AuthController.generateUsernameFromEmail(email);
-				user = await UserRepository.create(email, username);
-			} else {
-				// Update last login
-				await UserRepository.updateLastLogin(user.id);
+			// Set refresh token cookie
+			if (result.refreshToken) {
+				ResponseHelper.setRefreshTokenCookie(res, result.refreshToken);
 			}
 
-			// Create session
-			const sessionData = await SessionService.createSession({
-				userId: user.id,
-				userAgent: deviceInfo.userAgent,
-				ipAddress,
-				deviceName: deviceInfo.deviceName,
-			});
-
-			// Set refresh token as httpOnly cookie
-			res.cookie("refreshToken", sessionData.refreshToken, {
-				httpOnly: true,
-				secure: !config.isDevelopment, // Use secure in production
-				sameSite: "strict",
-				maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-				path: "/",
-			});
-
-			res.json({
+			ResponseHelper.sendSuccess(res, {
 				success: true,
-				user: {
-					id: user.id,
-					email: user.email,
-					username: user.username,
-				},
-				accessToken: sessionData.accessToken,
-				isNewUser,
+				user: result.user,
+				accessToken: result.accessToken,
+				isNewUser: result.isNewUser,
 			});
 		} catch (error) {
-			console.error("Verify OTP error:", error);
-
-			if (error instanceof z.ZodError) {
-				res.status(400).json({
-					error: "Invalid request data",
-					code: "VALIDATION_ERROR",
-					details: error.issues,
-				});
-				return;
-			}
-
-			res.status(500).json({
-				error: "Failed to verify OTP",
-				code: "INTERNAL_ERROR",
-			});
+			ErrorHandler.handleError(res, error, "verify OTP");
 		}
 	}
 
-	// POST /api/auth/refresh - Refresh access token using refresh token cookie
+	/**
+	 * POST /api/auth/refresh - Refresh access token
+	 */
 	static async refreshToken(
 		req: Request,
 		res: Response<RefreshTokenResponse | ApiErrorResponse>
@@ -155,38 +111,37 @@ export class AuthController {
 			const refreshToken = req.cookies?.refreshToken;
 
 			if (!refreshToken) {
-				res.status(401).json({
-					error: "Refresh token required",
-					code: "MISSING_REFRESH_TOKEN",
-				});
+				ErrorHandler.handleAuthError(
+					res,
+					"Refresh token required",
+					"MISSING_REFRESH_TOKEN"
+				);
 				return;
 			}
 
-			const result = await SessionService.refreshSession(refreshToken);
+			const result = await UserAuthService.refreshUserToken(refreshToken);
 
 			if (!result) {
-				// Clear invalid refresh token cookie
-				res.clearCookie("refreshToken");
-				res.status(401).json({
-					error: "Invalid or expired refresh token",
-					code: "INVALID_REFRESH_TOKEN",
-				});
+				ResponseHelper.clearRefreshTokenCookie(res);
+				ErrorHandler.handleAuthError(
+					res,
+					"Invalid or expired refresh token",
+					"INVALID_REFRESH_TOKEN"
+				);
 				return;
 			}
 
-			res.json({
+			ResponseHelper.sendSuccess(res, {
 				accessToken: result.accessToken,
 			});
 		} catch (error) {
-			console.error("Refresh token error:", error);
-			res.status(500).json({
-				error: "Failed to refresh token",
-				code: "INTERNAL_ERROR",
-			});
+			ErrorHandler.handleError(res, error, "refresh token");
 		}
 	}
 
-	// POST /api/auth/logout - Logout from current device or all devices
+	/**
+	 * POST /api/auth/logout - Logout from current or all devices
+	 */
 	static async logout(
 		req: Request<{}, {}, LogoutRequest>,
 		res: Response<LogoutResponse | ApiErrorResponse>
@@ -196,94 +151,80 @@ export class AuthController {
 			const refreshToken = req.cookies?.refreshToken;
 
 			if (!refreshToken) {
-				res.status(401).json({
-					error: "No active session found",
-					code: "NO_ACTIVE_SESSION",
-				});
+				ErrorHandler.handleAuthError(
+					res,
+					"No active session found",
+					"NO_ACTIVE_SESSION"
+				);
 				return;
 			}
 
 			let loggedOutDevices = 0;
 
 			if (logoutAll && req.user) {
-				// Logout from all devices
-				loggedOutDevices = await SessionService.logoutAllSessions(
+				loggedOutDevices = await UserAuthService.logoutFromAllDevices(
 					req.user.userId
 				);
 			} else {
-				// Logout from current device only
 				const success =
-					await SessionService.logoutSession(refreshToken);
+					await UserAuthService.logoutFromDevice(refreshToken);
 				loggedOutDevices = success ? 1 : 0;
 			}
 
-			// Clear refresh token cookie
-			res.clearCookie("refreshToken");
+			ResponseHelper.clearRefreshTokenCookie(res);
 
-			res.json({
+			ResponseHelper.sendSuccess(res, {
 				message: logoutAll
 					? `Logged out from ${loggedOutDevices} device(s)`
 					: "Logged out successfully",
 				loggedOutDevices,
 			});
 		} catch (error) {
-			console.error("Logout error:", error);
-
-			if (error instanceof z.ZodError) {
-				res.status(400).json({
-					error: "Invalid request data",
-					code: "VALIDATION_ERROR",
-					details: error.issues,
-				});
-				return;
-			}
-
-			res.status(500).json({
-				error: "Failed to logout",
-				code: "INTERNAL_ERROR",
-			});
+			ErrorHandler.handleError(res, error, "logout");
 		}
 	}
 
-	// GET /api/auth/devices - Get all active devices for current user
+	/**
+	 * GET /api/auth/devices - Get user's active devices
+	 */
 	static async getDevices(
 		req: Request,
 		res: Response<GetDevicesResponse | ApiErrorResponse>
 	): Promise<void> {
 		try {
 			if (!req.user) {
-				res.status(401).json({
-					error: "Authentication required",
-					code: "NOT_AUTHENTICATED",
-				});
+				ErrorHandler.handleAuthError(
+					res,
+					"Authentication required",
+					"NOT_AUTHENTICATED"
+				);
 				return;
 			}
 
-			const devices = await SessionService.getUserDevices(
+			const devices = await UserAuthService.getUserDevices(
 				req.user.userId
 			);
 
-			res.json({ devices });
+			ResponseHelper.sendSuccess(res, { devices });
 		} catch (error) {
-			console.error("Get devices error:", error);
-			res.status(500).json({
-				error: "Failed to get devices",
-				code: "INTERNAL_ERROR",
-			});
+			ErrorHandler.handleError(res, error, "get devices");
 		}
 	}
 
-	// DELETE /api/auth/devices/:sessionId - Logout from specific device
+	/**
+	 * DELETE /api/auth/devices/:sessionId - Logout from specific device
+	 */
 	static async logoutDevice(
 		req: Request<{ sessionId: string }>,
 		res: Response<LogoutDeviceResponse | ApiErrorResponse>
 	): Promise<void> {
 		try {
 			if (!req.user) {
-				res.status(401).json({
-					error: "Authentication required",
-					code: "NOT_AUTHENTICATED",
-				});
+				ErrorHandler.handleAuthError(
+					res,
+					"Authentication required",
+					"NOT_AUTHENTICATED"
+				);
 				return;
 			}
 
@@ -291,59 +232,48 @@ export class AuthController {
 				sessionId: req.params.sessionId,
 			});
 
-			const success = await SessionService.logoutDevice(
+			const success = await UserAuthService.logoutFromSpecificDevice(
 				req.user.userId,
 				sessionId
 			);
 
 			if (!success) {
-				res.status(404).json({
-					error: "Device session not found",
-					code: "SESSION_NOT_FOUND",
-				});
+				ErrorHandler.handleNotFoundError(
+					res,
+					"Device session not found"
+				);
 				return;
 			}
 
-			// If user is logging out their current session, clear the cookie
+			// Clear cookie if user is logging out their current session
 			if (req.sessionId === sessionId) {
-				res.clearCookie("refreshToken");
+				ResponseHelper.clearRefreshTokenCookie(res);
 			}
 
-			res.json({
+			ResponseHelper.sendSuccess(res, {
 				message: "Device logged out successfully",
 				success: true,
 			});
 		} catch (error) {
-			console.error("Logout device error:", error);
-
-			if (error instanceof z.ZodError) {
-				res.status(400).json({
-					error: "Invalid session ID",
-					code: "VALIDATION_ERROR",
-					details: error.issues,
-				});
-				return;
-			}
-
-			res.status(500).json({
-				error: "Failed to logout device",
-				code: "INTERNAL_ERROR",
-			});
+			ErrorHandler.handleError(res, error, "logout device");
 		}
 	}
 
-	// GET /api/auth/me - Get current user info
+	/**
+	 * GET /api/auth/me - Get current user info
+	 */
 	static async getCurrentUser(req: Request, res: Response): Promise<void> {
 		try {
 			if (!req.user) {
-				res.status(401).json({
-					error: "Authentication required",
-					code: "NOT_AUTHENTICATED",
-				});
+				ErrorHandler.handleAuthError(
+					res,
+					"Authentication required",
+					"NOT_AUTHENTICATED"
+				);
 				return;
 			}
 
-			res.json({
+			ResponseHelper.sendSuccess(res, {
 				user: {
 					id: req.user.userId,
 					email: req.user.email,
@@ -355,19 +285,7 @@ export class AuthController {
 				},
 			});
 		} catch (error) {
-			console.error("Get current user error:", error);
-			res.status(500).json({
-				error: "Failed to get user info",
-				code: "INTERNAL_ERROR",
-			});
+			ErrorHandler.handleError(res, error, "get current user");
 		}
-	}
-
-	// Helper: Generate username from email
-	private static generateUsernameFromEmail(email: string): string {
-		const emailParts = email.split("@");
-		const base = (emailParts[0] || "user").toLowerCase();
-		const randomSuffix = crypto.randomInt(1000, 9999);
-		return `${base}${randomSuffix}`;
 	}
 }

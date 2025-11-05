@@ -1,9 +1,8 @@
-import { PrismaClient } from "../generated/prisma/client.js";
 import { JwtService } from "./jwt.service.js";
+import { SessionRepository } from "../repositories/session.repository.js";
+import { DeviceMapper } from "../mappers/api.mappers.js";
 import crypto from "crypto";
 import type { ApiDeviceInfo } from "@repo/shared";
-
-const prisma = new PrismaClient();
 
 export interface CreateSessionOptions {
 	userId: string;
@@ -52,17 +51,16 @@ export class SessionService {
 		// Store refresh token in database
 		const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-		await prisma.refreshToken.create({
-			data: {
-				token: refreshToken,
-				userId: options.userId,
-				sessionId,
-				deviceName:
-					options.deviceName ||
-					this.parseDeviceName(options.userAgent),
-				userAgent: options.userAgent,
-				ipAddress: options.ipAddress,
-				expiresAt,
+		await SessionRepository.createRefreshToken({
+			token: refreshToken,
+			sessionId,
+			deviceName:
+				options.deviceName || this.parseDeviceName(options.userAgent),
+			userAgent: options.userAgent,
+			ipAddress: options.ipAddress,
+			expiresAt,
+			user: {
+				connect: { id: options.userId },
 			},
 		});
 
@@ -83,20 +81,15 @@ export class SessionService {
 			const payload = JwtService.verifyRefreshToken(refreshToken);
 
 			// Check if refresh token exists in database
-			const storedToken = await prisma.refreshToken.findUnique({
-				where: { token: refreshToken },
-				include: { user: true },
-			});
+			const storedToken =
+				await SessionRepository.findRefreshToken(refreshToken);
 
 			if (!storedToken || storedToken.expiresAt < new Date()) {
 				return null;
 			}
 
 			// Update last used timestamp
-			await prisma.refreshToken.update({
-				where: { token: refreshToken },
-				data: { lastUsed: new Date() },
-			});
+			await SessionRepository.updateLastUsed(refreshToken);
 
 			// Generate new access token
 			const accessToken = JwtService.generateAccessToken({
@@ -114,10 +107,9 @@ export class SessionService {
 	// Logout from current device
 	static async logoutSession(refreshToken: string): Promise<boolean> {
 		try {
-			const result = await prisma.refreshToken.delete({
-				where: { token: refreshToken },
-			});
-			return !!result;
+			const count =
+				await SessionRepository.deactivateByToken(refreshToken);
+			return count > 0;
 		} catch (error) {
 			console.error("Error logging out session:", error);
 			return false;
@@ -127,10 +119,7 @@ export class SessionService {
 	// Logout from all devices
 	static async logoutAllSessions(userId: string): Promise<number> {
 		try {
-			const result = await prisma.refreshToken.deleteMany({
-				where: { userId },
-			});
-			return result.count;
+			return await SessionRepository.deactivateAllForUser(userId);
 		} catch (error) {
 			console.error("Error logging out all sessions:", error);
 			return 0;
@@ -143,13 +132,11 @@ export class SessionService {
 		sessionId: string
 	): Promise<boolean> {
 		try {
-			const result = await prisma.refreshToken.deleteMany({
-				where: {
-					userId,
-					sessionId,
-				},
-			});
-			return result.count > 0;
+			const count = await SessionRepository.deleteSessionById(
+				userId,
+				sessionId
+			);
+			return count > 0;
 		} catch (error) {
 			console.error("Error logging out device:", error);
 			return false;
@@ -158,22 +145,8 @@ export class SessionService {
 
 	// Get all active sessions for user
 	static async getUserDevices(userId: string): Promise<ApiDeviceInfo[]> {
-		const refreshTokens = await prisma.refreshToken.findMany({
-			where: {
-				userId,
-				expiresAt: { gt: new Date() }, // Only active sessions
-			},
-			orderBy: { lastUsed: "desc" },
-		});
-
-		return refreshTokens.map((token) => ({
-			id: token.sessionId,
-			deviceName: token.deviceName || "Unknown Device",
-			userAgent: token.userAgent,
-			ipAddress: token.ipAddress,
-			lastUsed: token.lastUsed,
-			createdAt: token.createdAt,
-		}));
+		const refreshTokens = await SessionRepository.findUserSessions(userId);
+		return DeviceMapper.toApiDeviceInfoList(refreshTokens);
 	}
 
 	// Validate session by access token
@@ -182,15 +155,11 @@ export class SessionService {
 			const payload = JwtService.verifyAccessToken(accessToken);
 
 			// Verify session still exists
-			const sessionExists = await prisma.refreshToken.findFirst({
-				where: {
-					sessionId: payload.sessionId,
-					userId: payload.userId,
-					expiresAt: { gt: new Date() },
-				},
-			});
+			const sessionExists = await SessionRepository.findById(
+				payload.sessionId
+			);
 
-			if (!sessionExists) {
+			if (!sessionExists || sessionExists.expiresAt < new Date()) {
 				return null;
 			}
 
@@ -204,12 +173,7 @@ export class SessionService {
 	// Clean up expired refresh tokens
 	static async cleanupExpiredSessions(): Promise<number> {
 		try {
-			const result = await prisma.refreshToken.deleteMany({
-				where: {
-					expiresAt: { lt: new Date() },
-				},
-			});
-			return result.count;
+			return await SessionRepository.cleanupExpiredSessions();
 		} catch (error) {
 			console.error("Error cleaning up expired sessions:", error);
 			return 0;

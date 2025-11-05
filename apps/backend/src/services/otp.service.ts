@@ -4,6 +4,13 @@ import { queue } from "./queue.service.js";
 import crypto from "crypto";
 
 export class OtpService {
+	/**
+	 * Generate a 6-digit OTP code
+	 */
+	private static generateOtpCode(): string {
+		return crypto.randomInt(100000, 999999).toString();
+	}
+
 	// Generate and send OTP
 	static async generateAndSendOtp(
 		email: string
@@ -25,7 +32,7 @@ export class OtpService {
 			}
 
 			// Generate 6-digit OTP
-			const otpCode = crypto.randomInt(100000, 999999).toString();
+			const otpCode = this.generateOtpCode();
 
 			// Store OTP in Redis with 10-minute expiration
 			const otpData = {
@@ -121,39 +128,10 @@ export class OtpService {
 			console.error("Error verifying OTP:", error);
 			throw new Error("Failed to verify OTP");
 		}
-	}
-
-	// Generate OTP for basic auth (without email sending)
-	static async generateOtp(email: string): Promise<string> {
-		const otpCode = crypto.randomInt(100000, 999999).toString();
-
-		const otpData = {
-			code: otpCode,
-			email,
-			attempts: 0,
-			createdAt: Date.now(),
-		};
-
-		await redis.setex(
-			`otp:${email}`,
-			10 * 60, // 10 minutes
-			JSON.stringify(otpData)
-		);
-
-		return otpCode;
-	}
-
-	// Helper: Get OTP from Redis
+	} // Helper: Get OTP from Redis
 	private static async getOtpFromRedis(
 		email: string
 	): Promise<string | null> {
 		return await redis.get(`otp:${email}`);
-	}
-
-	// Public cleanup method for scheduled jobs (no longer needed with Redis auto-expiration)
-	static async cleanupAllExpiredOtps(): Promise<number> {
-		// Redis automatically expires keys, so this is now a no-op
-		// But we keep it for compatibility
-		return 0;
 	}
 }
