@@ -34,6 +34,8 @@ model User {
   id          String         @id @default(uuid())
   email       String         @unique
   username    String         @unique
+  isActive    Boolean        @default(true)
+  lastLoginAt DateTime?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -43,9 +45,13 @@ model User {
   ticketUpdates      TicketUpdate[] @relation("TicketUpdateUser")
   projectsSubscribed Project[]      @relation("ProjectSubscribers")
   notifications      Notification[] @relation("NotificationRecipient")
+  
+  // Auth Relations
+  refreshTokens      RefreshToken[] @relation("UserRefreshTokens")
 
   @@map("users")
   @@index([username])
+  @@index([email])
 }
 
 model Project {
@@ -134,4 +140,30 @@ model Notification {
   @@index([ticketUpdateId])
   @@index([read])
   @@index([createdAt])
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String
+  sessionId   String   // Unique session identifier
+  
+  // Device tracking
+  deviceName  String?  // User-friendly device name
+  userAgent   String   // Browser/device info
+  ipAddress   String   // IP address when token was created
+  
+  // Timestamps
+  expiresAt   DateTime
+  lastUsed    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user User @relation("UserRefreshTokens", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([sessionId])
+  @@index([token])
 }

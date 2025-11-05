@@ -19,7 +19,7 @@
 		"build": "tsup",
 		"dev": "tsup --watch",
 		"check-types": "tsc --noEmit",
-		"clean": "rm -rf dist"
+		"clean": "rimraf dist"
 	},
 	"devDependencies": {
 		"@repo/typescript-config": "*",
@@ -28,5 +28,8 @@
 	},
 	"publishConfig": {
 		"access": "public"
+	},
+	"dependencies": {
+		"zod": "^4.1.12"
 	}
 }

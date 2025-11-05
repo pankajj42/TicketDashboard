@@ -9,9 +9,20 @@ const config = {
 
 	PORT: process.env.PORT || 3000,
 
+	// JWT Secrets
 	JWT_SECRET: process.env.JWT_SECRET || "default_jwt_secret",
+	JWT_REFRESH_SECRET:
+		process.env.JWT_REFRESH_SECRET || "default_refresh_jwt_secret",
+
+	// Admin JWT Secrets (separate for admin tokens)
 	ADMIN_JWT_SECRET:
 		process.env.ADMIN_JWT_SECRET || "default_admin_jwt_secret",
+	ADMIN_JWT_REFRESH_SECRET:
+		process.env.ADMIN_JWT_REFRESH_SECRET ||
+		"default_admin_refresh_jwt_secret",
+
+	// Admin Password
+	ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || "admin123",
 
 	REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
 
