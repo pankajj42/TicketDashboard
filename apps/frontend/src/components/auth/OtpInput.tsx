@@ -6,6 +6,7 @@ import {
 } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { AUTH_CONFIG } from "@/lib/constants";
 
 interface OtpInputProps {
 	value: string;
@@ -19,7 +20,7 @@ interface OtpInputProps {
 export default function OtpInput({
 	value,
 	onChange,
-	length = 6,
+	length = AUTH_CONFIG.OTP_LENGTH,
 	disabled = false,
 	autoFocus = true,
 	className,

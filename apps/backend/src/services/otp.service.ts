@@ -1,6 +1,7 @@
 import { UserRepository } from "../repositories/user.repository.js";
 import { redis } from "../lib/redis.js";
 import { queue } from "./queue.service.js";
+import config from "../config/env.js";
 import crypto from "crypto";
 
 export class OtpService {
@@ -21,12 +22,12 @@ export class OtpService {
 			if (existingOtp) {
 				const otpData = JSON.parse(existingOtp);
 				const timeSinceCreation = Date.now() - otpData.createdAt;
-				const oneMinute = 60 * 1000;
+				const rateLimitMs = config.OTP_RATE_LIMIT_SECONDS * 1000;
 
-				if (timeSinceCreation < oneMinute) {
+				if (timeSinceCreation < rateLimitMs) {
 					return {
 						success: false,
-						message: `Please wait ${Math.ceil((oneMinute - timeSinceCreation) / 1000)} seconds before requesting a new OTP`,
+						message: `Please wait ${Math.ceil((rateLimitMs - timeSinceCreation) / 1000)} seconds before requesting a new OTP`,
 					};
 				}
 			}
@@ -34,7 +35,7 @@ export class OtpService {
 			// Generate 6-digit OTP
 			const otpCode = this.generateOtpCode();
 
-			// Store OTP in Redis with 10-minute expiration
+			// Store OTP in Redis with configured expiration
 			const otpData = {
 				code: otpCode,
 				email,
@@ -44,7 +45,7 @@ export class OtpService {
 
 			await redis.setex(
 				`otp:${email}`,
-				10 * 60, // 10 minutes
+				config.OTP_EXPIRY_MINUTES * 60, // Convert minutes to seconds
 				JSON.stringify(otpData)
 			);
 

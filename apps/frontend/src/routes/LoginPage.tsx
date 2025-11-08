@@ -2,7 +2,6 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 import {
 	Card,
 	CardContent,
@@ -10,6 +9,10 @@ import {
 	CardTitle,
 } from "../components/ui/card";
 import LogoIcon from "@/components/logo";
+import EmailInput from "@/components/auth/EmailInput";
+import OtpInput from "@/components/auth/OtpInput";
+import Timer from "@/components/auth/Timer";
+import { AUTH_CONFIG } from "@/lib/constants";
 
 export default function LoginPage() {
 	const [step, setStep] = useState("email");
@@ -51,20 +54,15 @@ export default function LoginPage() {
 					<CardTitle>Ticket Dashboard</CardTitle>
 				</CardHeader>
 				<CardContent className="space-y-4">
-					{error && (
-						<div className="p-3 text-sm text-red-600 bg-red-50 rounded">
-							{error}
-						</div>
-					)}
-
 					{step === "email" ? (
 						<div className="space-y-4">
-							<Input
-								type="email"
+							<EmailInput
 								value={email}
-								onChange={(e) => setEmail(e.target.value)}
+								onChange={setEmail}
+								onEnterKey={handleSendOtp}
 								placeholder="Enter your email"
 								disabled={isLoading}
+								error={error || undefined}
 							/>
 							<Button
 								onClick={handleSendOtp}
@@ -75,29 +73,51 @@ export default function LoginPage() {
 							</Button>
 						</div>
 					) : (
-						<div className="space-y-4">
-							<p className="text-sm text-center">
-								Code sent to {email}
-							</p>
-							<Input
-								type="text"
-								value={otp}
-								onChange={(e) =>
-									setOtp(
-										e.target.value
-											.replace(/\D/g, "")
-											.slice(0, 6)
-									)
-								}
-								placeholder="000000"
-								disabled={isLoading}
-								maxLength={6}
-								className="text-center"
-							/>
+						<div className="space-y-6">
+							<div className="text-center space-y-2">
+								<p className="text-sm text-muted-foreground">
+									Code sent to{" "}
+									<span className="font-medium">{email}</span>
+								</p>
+								<Timer
+									initial={
+										AUTH_CONFIG.OTP_EXPIRY_MINUTES * 60
+									}
+									onExpire={() => {
+										setStep("email");
+										setOtp("");
+									}}
+									className="justify-center"
+								/>
+							</div>
+
+							<div className="space-y-4">
+								<div className="flex justify-center">
+									<OtpInput
+										value={otp}
+										onChange={setOtp}
+										length={AUTH_CONFIG.OTP_LENGTH}
+										disabled={isLoading}
+										autoFocus
+									/>
+								</div>
+
+								{error && (
+									<div className="text-center">
+										<p className="text-sm text-destructive">
+											{error}
+										</p>
+									</div>
+								)}
+							</div>
+
 							<div className="flex gap-2">
 								<Button
 									variant="outline"
-									onClick={() => setStep("email")}
+									onClick={() => {
+										setStep("email");
+										setOtp("");
+									}}
 									disabled={isLoading}
 									className="flex-1"
 								>
@@ -105,7 +125,10 @@ export default function LoginPage() {
 								</Button>
 								<Button
 									onClick={handleVerifyOtp}
-									disabled={isLoading || otp.length !== 6}
+									disabled={
+										isLoading ||
+										otp.length !== AUTH_CONFIG.OTP_LENGTH
+									}
 									className="flex-1"
 								>
 									{isLoading ? "Verifying..." : "Verify"}

@@ -32,6 +32,13 @@ const config = {
 	SMTP_PORT: parseInt(process.env.SMTP_PORT || "587"),
 	FROM_EMAIL: process.env.FROM_EMAIL || "<sender@email.com>",
 
+	// OTP Configuration
+	OTP_LENGTH: parseInt(process.env.OTP_LENGTH || "6"),
+	OTP_EXPIRY_MINUTES: parseInt(process.env.OTP_EXPIRY_MINUTES || "5"),
+	OTP_RATE_LIMIT_SECONDS: parseInt(
+		process.env.OTP_RATE_LIMIT_SECONDS || "60"
+	),
+
 	isDevelopment: (process.env.NODE_ENV || "development") === "development",
 	sendOutMails: (process.env.SEND_OUT_MAILS || "true") === "true",
 };

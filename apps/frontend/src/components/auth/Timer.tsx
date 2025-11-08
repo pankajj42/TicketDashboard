@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AUTH_CONFIG } from "@/lib/constants";
 
 interface TimerProps {
 	initial?: number;
@@ -10,7 +11,7 @@ interface TimerProps {
 }
 
 export default function Timer({
-	initial = 300,
+	initial = AUTH_CONFIG.OTP_EXPIRY_MINUTES * 60,
 	onExpire,
 	className,
 	showIcon = true,

@@ -40,17 +40,22 @@ export const LoginSchema = z.object({
 	email: z.string().email("Invalid email format"),
 });
 
-export const VerifyOtpSchema = z.object({
-	email: z.string().email("Invalid email format"),
-	otp: z
-		.string()
-		.length(6, "OTP must be 6 digits")
-		.regex(/^\d+$/, "OTP must contain only numbers"),
-	deviceInfo: z.object({
-		userAgent: z.string().min(1, "User agent required"),
-		deviceName: z.string().optional(),
-	}),
-});
+// Factory function for creating OTP schema with configurable length
+export const createVerifyOtpSchema = (otpLength: number = 6) =>
+	z.object({
+		email: z.string().email("Invalid email format"),
+		otp: z
+			.string()
+			.length(otpLength, `OTP must be ${otpLength} digits`)
+			.regex(/^\d+$/, "OTP must contain only numbers"),
+		deviceInfo: z.object({
+			userAgent: z.string().min(1, "User agent required"),
+			deviceName: z.string().optional(),
+		}),
+	});
+
+// Default export for backward compatibility
+export const VerifyOtpSchema = createVerifyOtpSchema(6);
 
 export const AdminElevationSchema = z.object({
 	adminPassword: z.string().min(1, "Admin password required"),

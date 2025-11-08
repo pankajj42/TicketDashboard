@@ -53,7 +53,7 @@ export class EmailService {
             <div style="background: #f4f4f4; padding: 15px; border-radius: 5px; text-align: center; font-size: 24px; letter-spacing: 5px; margin: 20px 0;">
               <strong>${otp}</strong>
             </div>
-            <p>This OTP will expire in 10 minutes.</p>
+            <p>This OTP will expire in ${config.OTP_EXPIRY_MINUTES} minute${config.OTP_EXPIRY_MINUTES === 1 ? "" : "s"}.</p>
             <p>If you didn't request this OTP, please ignore this email.</p>
           </div>
         `,

@@ -7,8 +7,10 @@ export const API_CONFIG = {
 
 // Authentication Constants
 export const AUTH_CONFIG = {
-	OTP_LENGTH: 6,
-	OTP_EXPIRY_MINUTES: 5,
+	OTP_LENGTH: parseInt(import.meta.env.VITE_OTP_LENGTH || "6"),
+	OTP_EXPIRY_MINUTES: parseInt(
+		import.meta.env.VITE_OTP_EXPIRY_MINUTES || "5"
+	),
 	TOKEN_REFRESH_THRESHOLD: 5 * 60 * 1000, // 5 minutes in ms
 	MAX_RETRY_ATTEMPTS: 3,
 } as const;
