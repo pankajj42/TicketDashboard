@@ -11,6 +11,7 @@ import {
 	SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useState } from "react";
+import LogoIcon from "./logo";
 
 // Menu items.
 const items = [
@@ -39,9 +40,7 @@ export function AppSidebar() {
 		<Sidebar>
 			<SidebarHeader className="bg-gray-50 dark:bg-gray-950">
 				<div className="flex items-center gap-3 mb-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-					<div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-						<span className="text-white font-bold text-xl">TD</span>
-					</div>
+					<LogoIcon />
 					<div className="flex-1 min-w-0">
 						<div className="font-bold text-gray-800 dark:text-gray-100 text-lg">
 							TicketDash

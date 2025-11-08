@@ -7,7 +7,8 @@
 		"dev": "vite",
 		"build": "tsc -b && vite build",
 		"lint": "eslint .",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"clean": "rimraf dist && tsc -b --clean"
 	},
 	"dependencies": {
 		"@dnd-kit/core": "^6.3.1",
@@ -28,8 +29,11 @@
 		"lucide-react": "^0.548.0",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
+		"react-router-dom": "^7.9.5",
+		"sonner": "^2.0.7",
 		"tailwind-merge": "^3.3.1",
-		"tailwindcss": "^4.1.16"
+		"tailwindcss": "^4.1.16",
+		"zustand": "^5.0.8"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.36.0",

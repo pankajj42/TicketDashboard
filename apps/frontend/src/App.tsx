@@ -1,42 +1,56 @@
 import "./App.css";
-import { useState } from "react";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "./components/app-sidebar";
-import AppHeader from "./components/app-header";
-import KanbanBoard from "./components/kanban/kanban-board";
-import { ThemeProvider } from "./components/theme-provider";
-import {
-	DEFAULT_BOARD,
-	type Column,
-	uid,
-} from "./components/kanban/kanban-utils";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ErrorBoundary } from "@/components/error-boundary";
+import AuthProvider from "@/components/AuthProvider";
+import ProtectedRoute, { PublicRoute } from "@/components/ProtectedRoute";
+import DashboardPage from "./routes/DashboardPage";
+import LoginPage from "./routes/LoginPage";
+import { Toaster } from "sonner";
 
 function App() {
-	const [columns, setColumns] = useState<Column[]>(DEFAULT_BOARD);
-
-	function handleAddCard(title: string, columnId: string) {
-		setColumns((prev) =>
-			prev.map((c) =>
-				c.id === columnId
-					? {
-							...c,
-							items: [{ id: uid("c"), title }, ...c.items],
-						}
-					: c
-			)
-		);
-	}
-
 	return (
-		<ThemeProvider defaultTheme="light" storageKey="ticket-dashboard-theme">
-			<SidebarProvider>
-				<AppSidebar />
-				<main className="h-screen w-full flex flex-col">
-					<AppHeader columns={columns} onAddCard={handleAddCard} />
-					<KanbanBoard columns={columns} setColumns={setColumns} />
-				</main>
-			</SidebarProvider>
-		</ThemeProvider>
+		<ErrorBoundary>
+			<ThemeProvider
+				defaultTheme="system"
+				storageKey="ticketdash-ui-theme"
+			>
+				<AuthProvider>
+					<Toaster position="top-right" richColors closeButton />
+					<Routes>
+						{/* Public routes - redirect to dashboard if authenticated */}
+						<Route
+							path="/login"
+							element={
+								<PublicRoute>
+									<LoginPage />
+								</PublicRoute>
+							}
+						/>
+
+						{/* Protected routes - require authentication */}
+						<Route
+							path="/dashboard"
+							element={
+								<ProtectedRoute>
+									<DashboardPage />
+								</ProtectedRoute>
+							}
+						/>
+
+						{/* Default redirect */}
+						<Route
+							path="/"
+							element={<Navigate to="/dashboard" replace />}
+						/>
+						<Route
+							path="*"
+							element={<Navigate to="/login" replace />}
+						/>
+					</Routes>
+				</AuthProvider>
+			</ThemeProvider>
+		</ErrorBoundary>
 	);
 }
 

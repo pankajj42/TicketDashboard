@@ -9,9 +9,11 @@ export class EmailService {
 			return this.transporter;
 		}
 
-		// For development, or without SMTP config, log to console
-		if (config.isDevelopment || !config.SMTP_USER || !config.SMTP_PASS) {
-			console.log("Emails will be logged to console.");
+		// Check if we should send real emails or just log to console
+		if (!config.sendOutMails || !config.SMTP_USER || !config.SMTP_PASS) {
+			console.log(
+				"Emails will be logged to console (SEND_OUT_MAILS=false or missing SMTP config)."
+			);
 
 			this.transporter = nodemailer.createTransport({
 				streamTransport: true,
@@ -19,6 +21,9 @@ export class EmailService {
 				buffer: true,
 			});
 		} else {
+			console.log(
+				"Configuring real SMTP transporter (SEND_OUT_MAILS=true)."
+			);
 			this.transporter = nodemailer.createTransport({
 				host: config.SMTP_HOST,
 				port: config.SMTP_PORT,
@@ -55,15 +60,14 @@ export class EmailService {
 			};
 
 			const info = await transporter.sendMail(mailOptions);
-			console.log(`OTP email sent to ${email}`);
-			if (
-				config.isDevelopment ||
-				!config.SMTP_USER ||
-				!config.SMTP_PASS
-			) {
+
+			if (config.sendOutMails && config.SMTP_USER && config.SMTP_PASS) {
+				console.log(`✅ OTP email sent successfully to ${email}`);
+			} else {
+				console.log(`📧 OTP email (mock) for ${email}: ${otp}`);
 				console.log(
-					"Email would be sent with options:",
-					info.message.toString()
+					"Email content:",
+					info.message?.toString() || "Email prepared but not sent"
 				);
 			}
 		} catch (error) {
@@ -96,15 +100,18 @@ export class EmailService {
 			};
 
 			const info = await transporter.sendMail(mailOptions);
-			console.log(`Notification email sent to ${email}`);
-			if (
-				config.isDevelopment ||
-				!config.SMTP_USER ||
-				!config.SMTP_PASS
-			) {
+
+			if (config.sendOutMails && config.SMTP_USER && config.SMTP_PASS) {
 				console.log(
-					"Email would be sent with options:",
-					info.message.toString()
+					`✅ Notification email sent successfully to ${email}`
+				);
+			} else {
+				console.log(
+					`📧 Notification email (mock) for ${email}: ${subject}`
+				);
+				console.log(
+					"Email content:",
+					info.message?.toString() || "Email prepared but not sent"
 				);
 			}
 		} catch (error) {

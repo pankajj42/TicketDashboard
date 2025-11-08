@@ -10,8 +10,13 @@ export class ErrorHandler {
 		res: Response<ApiErrorResponse>,
 		error: z.ZodError
 	): void {
+		// Get the first validation error message for user-friendly display
+		const firstError = error.issues[0];
+		const userFriendlyMessage =
+			firstError?.message || "Invalid request data";
+
 		res.status(400).json({
-			error: "Invalid request data",
+			error: userFriendlyMessage,
 			code: "VALIDATION_ERROR",
 			details: error.issues,
 		});
@@ -92,8 +97,7 @@ export class ErrorHandler {
 		error: unknown,
 		operation: string
 	): void {
-		console.error(`${operation} error:`, error);
-
+		// Handle validation errors first (no logging needed for user input errors)
 		if (error instanceof z.ZodError) {
 			this.handleValidationError(res, error);
 			return;
@@ -126,6 +130,9 @@ export class ErrorHandler {
 				return;
 			}
 		}
+
+		// Log unexpected errors for debugging
+		console.error(`${operation} error:`, error);
 
 		this.handleInternalError(res, `Failed to ${operation}`);
 	}

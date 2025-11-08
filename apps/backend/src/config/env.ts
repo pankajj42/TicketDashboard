@@ -33,6 +33,7 @@ const config = {
 	FROM_EMAIL: process.env.FROM_EMAIL || "<sender@email.com>",
 
 	isDevelopment: (process.env.NODE_ENV || "development") === "development",
+	sendOutMails: (process.env.SEND_OUT_MAILS || "true") === "true",
 };
 
 export default config;
