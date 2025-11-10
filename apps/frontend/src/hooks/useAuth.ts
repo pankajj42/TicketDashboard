@@ -37,21 +37,26 @@ export const useAuth = () => {
 	const reset = useResetAuth();
 
 	/**
-	 * Send OTP to email for login
+	 * Send OTP to email for login with timing information
 	 */
 	const sendOtp = useCallback(
-		async (email: string): Promise<boolean> => {
+		async (
+			email: string
+		): Promise<{ success: boolean; expiresIn?: number }> => {
 			try {
 				setError(null);
 				setLoading(true);
 
 				const response = await AuthApiService.sendOtp(email);
 
-				if (response.otpSent) {
+				if (response.success && response.data?.otpSent) {
 					toast.success(response.message);
-					return true;
+					return {
+						success: true,
+						expiresIn: response.data?.timing?.expiresIn,
+					};
 				}
-				return false;
+				return { success: false };
 			} catch (error) {
 				const errorMessage =
 					error instanceof ApiError
@@ -59,7 +64,7 @@ export const useAuth = () => {
 						: ERROR_MESSAGES.SERVER_ERROR;
 
 				setError(errorMessage);
-				return false;
+				return { success: false };
 			} finally {
 				setLoading(false);
 			}
@@ -78,8 +83,12 @@ export const useAuth = () => {
 
 				const response = await AuthApiService.verifyOtp(email, otp);
 
-				if (response.success && response.user && response.accessToken) {
-					setAuth(response.user, response.accessToken);
+				if (
+					response.success &&
+					response.data?.user &&
+					response.data?.accessToken
+				) {
+					setAuth(response.data.user, response.data.accessToken);
 					toast.success(SUCCESS_MESSAGES.LOGIN_SUCCESS);
 
 					// Navigate to dashboard after successful login

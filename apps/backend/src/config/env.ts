@@ -1,4 +1,10 @@
 import dotenv from "dotenv";
+import {
+	OTP_CONFIG,
+	USER_AUTH_CONFIG,
+	SESSION_CONFIG,
+	API_CONFIG,
+} from "@repo/shared";
 
 dotenv.config();
 
@@ -32,22 +38,22 @@ const config = {
 	SMTP_PORT: parseInt(process.env.SMTP_PORT || "587"),
 	FROM_EMAIL: process.env.FROM_EMAIL || "<sender@email.com>",
 
-	// OTP Configuration
-	OTP_LENGTH: parseInt(process.env.OTP_LENGTH || "6"),
-	OTP_EXPIRY_MINUTES: parseInt(process.env.OTP_EXPIRY_MINUTES || "5"),
-	OTP_REREQUEST_RATE_LIMIT_SECONDS: parseInt(
-		process.env.OTP_REREQUEST_RATE_LIMIT_SECONDS || "60"
-	),
-	OTP_VERIFY_ATTEMPTS_LIMIT: parseInt(
-		process.env.OTP_VERIFY_ATTEMPTS_LIMIT || "5"
-	),
+	// Authentication Configuration (from shared constants)
+	OTP_LENGTH: OTP_CONFIG.LENGTH,
+	OTP_EXPIRY_MINUTES: OTP_CONFIG.EXPIRY_MINUTES,
+	OTP_REREQUEST_RATE_LIMIT_SECONDS: OTP_CONFIG.RESEND_COOLDOWN_SECONDS,
+	OTP_VERIFY_ATTEMPTS_LIMIT: OTP_CONFIG.MAX_VERIFY_ATTEMPTS,
 
-	USER_AUTH_ATTEMPTS_LIMIT: parseInt(
-		process.env.USER_AUTH_ATTEMPTS_LIMIT || "5"
-	),
-	USER_AUTH_RATE_LIMIT_SECONDS: parseInt(
-		process.env.USER_AUTH_RATE_LIMIT_SECONDS || "60"
-	),
+	USER_AUTH_ATTEMPTS_LIMIT: USER_AUTH_CONFIG.MAX_LOGIN_ATTEMPTS,
+	USER_AUTH_RATE_LIMIT_SECONDS: USER_AUTH_CONFIG.RATE_LIMIT_SECONDS,
+
+	// Session Configuration (from shared constants)
+	ACCESS_TOKEN_EXPIRY_MINUTES: SESSION_CONFIG.ACCESS_TOKEN_EXPIRY_MINUTES,
+	REFRESH_TOKEN_EXPIRY_DAYS: SESSION_CONFIG.REFRESH_TOKEN_EXPIRY_DAYS,
+	ADMIN_TOKEN_EXPIRY_MINUTES: SESSION_CONFIG.ADMIN_TOKEN_EXPIRY_MINUTES,
+
+	// API Configuration
+	REQUEST_TIMEOUT_MS: API_CONFIG.TIMEOUT_MS,
 
 	isDevelopment: (process.env.NODE_ENV || "development") === "development",
 	sendOutMails: (process.env.SEND_OUT_MAILS || "true") === "true",

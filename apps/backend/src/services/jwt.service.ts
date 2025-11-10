@@ -5,10 +5,6 @@ import type {
 	AccessTokenPayload,
 	BaseRefreshTokenPayload,
 	RefreshTokenPayload,
-	BaseAdminAccessTokenPayload,
-	AdminAccessTokenPayload,
-	BaseAdminRefreshTokenPayload,
-	AdminRefreshTokenPayload,
 } from "@repo/shared";
 
 export class JwtService {
@@ -16,19 +12,19 @@ export class JwtService {
 	// USER TOKENS
 	// ================================
 
-	// Generate user access token (15 minute lifespan)
+	// Generate user access token (uses shared config)
 	static generateAccessToken(payload: BaseAccessTokenPayload): string {
 		return jwt.sign(payload, config.JWT_SECRET, {
-			expiresIn: "15m",
+			expiresIn: `${config.ACCESS_TOKEN_EXPIRY_MINUTES}m`,
 			issuer: "ticket-dashboard",
 			audience: "ticket-dashboard-client",
 		});
 	}
 
-	// Generate user refresh token (7 days lifespan)
+	// Generate user refresh token (uses shared config)
 	static generateRefreshToken(payload: BaseRefreshTokenPayload): string {
 		return jwt.sign(payload, config.JWT_REFRESH_SECRET, {
-			expiresIn: "7d",
+			expiresIn: `${config.REFRESH_TOKEN_EXPIRY_DAYS}d`,
 			issuer: "ticket-dashboard",
 			audience: "ticket-dashboard-client",
 		});

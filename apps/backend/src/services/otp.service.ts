@@ -2,12 +2,14 @@ import { redis } from "../lib/redis.js";
 import { queue } from "./queue.service.js";
 import config from "../config/env.js";
 import crypto from "crypto";
+import { createOtpTiming, type OtpResponse } from "@repo/shared";
 
 interface OtpData {
 	code: string;
 	email: string;
 	attempts: number;
 	createdAt: number;
+	otpId: string; // Unique identifier for this OTP
 }
 
 export class OtpService {
@@ -18,11 +20,12 @@ export class OtpService {
 		return crypto.randomInt(100000, 999999).toString();
 	}
 
-	// Generate and send OTP
-	static async generateAndSendOtp(
-		email: string
-	): Promise<{ success: boolean; message: string }> {
+	// Generate and send OTP with timing information
+	static async generateAndSendOtp(email: string): Promise<OtpResponse> {
 		try {
+			const now = new Date();
+			const otpId = crypto.randomUUID();
+
 			// Check for existing valid OTP (rate limiting)
 			const existingOtp = await this.getOtpFromRedis(email);
 			if (existingOtp) {
@@ -32,22 +35,55 @@ export class OtpService {
 					config.OTP_REREQUEST_RATE_LIMIT_SECONDS * 1000;
 
 				if (timeSinceCreation < rateLimitMs) {
+					// Return existing OTP timing info for rate limiting
+					const otpExpiryDate = new Date(
+						otpData.createdAt +
+							config.OTP_EXPIRY_MINUTES * 60 * 1000
+					);
+					const resendAllowedDate = new Date(
+						otpData.createdAt + rateLimitMs
+					);
+
 					return {
 						success: false,
-						message: `Please wait ${Math.ceil((rateLimitMs - timeSinceCreation) / 1000)} seconds before requesting a new OTP`,
+						message: `Please wait before requesting a new OTP`,
+						code: "RATE_LIMITED",
+						data: {
+							otpId: otpData.otpId,
+							...createOtpTiming(
+								otpExpiryDate,
+								resendAllowedDate
+							),
+							config: {
+								length: config.OTP_LENGTH,
+								maxAttempts: config.OTP_VERIFY_ATTEMPTS_LIMIT,
+								attemptsRemaining:
+									config.OTP_VERIFY_ATTEMPTS_LIMIT -
+									otpData.attempts,
+							},
+						},
 					};
 				}
 			}
 
-			// Generate 6-digit OTP
+			// Generate OTP code
 			const otpCode = this.generateOtpCode();
+
+			// Calculate expiry dates
+			const otpExpiryDate = new Date(
+				now.getTime() + config.OTP_EXPIRY_MINUTES * 60 * 1000
+			);
+			const resendAllowedDate = new Date(
+				now.getTime() + config.OTP_REREQUEST_RATE_LIMIT_SECONDS * 1000
+			);
 
 			// Store OTP in Redis with configured expiration
 			const otpData: OtpData = {
 				code: otpCode,
 				email,
 				attempts: 0,
-				createdAt: Date.now(),
+				createdAt: now.getTime(),
+				otpId,
 			};
 
 			await redis.setex(
@@ -62,6 +98,16 @@ export class OtpService {
 			return {
 				success: true,
 				message: "OTP sent successfully",
+				code: "OTP_SENT",
+				data: {
+					otpId,
+					...createOtpTiming(otpExpiryDate, resendAllowedDate),
+					config: {
+						length: config.OTP_LENGTH,
+						maxAttempts: config.OTP_VERIFY_ATTEMPTS_LIMIT,
+						attemptsRemaining: config.OTP_VERIFY_ATTEMPTS_LIMIT,
+					},
+				},
 			};
 		} catch (error) {
 			console.error("Error generating OTP:", error);
@@ -69,13 +115,15 @@ export class OtpService {
 		}
 	}
 
-	// Verify OTP
+	// Verify OTP with enhanced error information
 	static async verifyOtp(
 		email: string,
 		code: string
 	): Promise<{
 		success: boolean;
 		message?: string;
+		code?: string;
+		attemptsRemaining?: number;
 	}> {
 		try {
 			// Get OTP from Redis
@@ -84,6 +132,7 @@ export class OtpService {
 				return {
 					success: false,
 					message: "Invalid or expired OTP",
+					code: "OTP_EXPIRED",
 				};
 			}
 
@@ -97,6 +146,8 @@ export class OtpService {
 					success: false,
 					message:
 						"Too many failed attempts. Please request a new OTP",
+					code: "OTP_ATTEMPTS_EXCEEDED",
+					attemptsRemaining: 0,
 				};
 			}
 
@@ -104,6 +155,8 @@ export class OtpService {
 			if (otpData.code !== code) {
 				// Increment attempts
 				otpData.attempts += 1;
+				const attemptsRemaining =
+					config.OTP_VERIFY_ATTEMPTS_LIMIT - otpData.attempts;
 
 				// Get remaining TTL to preserve original expiration
 				const remainingTtl = await redis.ttl(`otp:${email}`);
@@ -122,7 +175,9 @@ export class OtpService {
 
 				return {
 					success: false,
-					message: "Invalid or expired OTP",
+					message: `Invalid OTP. ${attemptsRemaining} attempts remaining`,
+					code: "OTP_INVALID",
+					attemptsRemaining,
 				};
 			}
 
@@ -131,6 +186,7 @@ export class OtpService {
 
 			return {
 				success: true,
+				code: "OTP_VERIFIED",
 			};
 		} catch (error) {
 			console.error("Error verifying OTP:", error);

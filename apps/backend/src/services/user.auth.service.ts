@@ -2,7 +2,7 @@ import { OtpService } from "./otp.service.js";
 import { CreateSessionOptions, SessionService } from "./session.service.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import { UserMapper } from "../mappers/api.mappers.js";
-import type { ApiUser } from "@repo/shared";
+import type { ApiUser, OtpResponse } from "@repo/shared";
 
 export interface AuthResult {
 	success: boolean;
@@ -13,21 +13,24 @@ export interface AuthResult {
 	message?: string;
 }
 
-export interface LoginResult {
+// Enhanced LoginResult to include OTP timing information
+export interface LoginResult extends Omit<OtpResponse, "success"> {
 	success: boolean;
-	message: string;
 }
 
 export class UserAuthService {
 	/**
-	 * Send OTP to user's email
+	 * Send OTP to user's email with timing information
 	 */
 	static async sendLoginOtp(email: string): Promise<LoginResult> {
 		const result = await OtpService.generateAndSendOtp(email);
 
+		// Return the full OTP response with timing information
 		return {
 			success: result.success,
-			message: result.success ? "OTP sent to your email" : result.message,
+			message: result.message,
+			code: result.code,
+			data: result.data,
 		};
 	}
 

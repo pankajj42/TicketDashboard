@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const title = "Project Title Here";
 
+// Export authentication configuration
+export * from "./auth-config.js";
+
 // Utility functions
 export const formatDate = (date: Date): string => {
 	return new Intl.DateTimeFormat("en-US", {
@@ -80,18 +83,7 @@ export type AdminElevationRequest = z.infer<typeof AdminElevationSchema>;
 export type LogoutRequest = z.infer<typeof LogoutSchema>;
 export type LogoutDeviceRequest = z.infer<typeof LogoutDeviceSchema>;
 
-// Auth Response Types
-export interface LoginResponse {
-	message: string;
-	otpSent: boolean;
-}
-
-export interface VerifyOtpResponse {
-	success: true;
-	user: ApiUser;
-	accessToken: string;
-	isNewUser?: boolean;
-}
+// Auth Response Types (moved to auth-config.ts for enhanced timing support)
 
 export interface AdminElevationResponse {
 	success: true;

@@ -38,14 +38,26 @@ export class AuthController {
 				ErrorHandler.handleBadRequestError(
 					res,
 					result.message,
-					"OTP_GENERATION_FAILED"
+					result.code || "OTP_GENERATION_FAILED"
 				);
 				return;
 			}
 
 			ResponseHelper.sendSuccess(res, {
+				success: true,
 				message: result.message,
-				otpSent: true,
+				code: result.code,
+				data: {
+					otpSent: true,
+					timing: result.data?.expiresAt
+						? {
+								expiresAt: result.data.expiresAt,
+								expiresIn: result.data.expiresIn,
+								issuedAt: new Date().toISOString(),
+							}
+						: undefined,
+					otpConfig: result.data?.config,
+				},
 			});
 		} catch (error) {
 			ErrorHandler.handleError(res, error, "send login OTP");

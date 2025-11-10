@@ -18,6 +18,9 @@ export default function LoginPage() {
 	const [step, setStep] = useState("email");
 	const [email, setEmail] = useState("");
 	const [otp, setOtp] = useState("");
+	const [otpExpiryTime, setOtpExpiryTime] = useState<number>(
+		AUTH_CONFIG.OTP_EXPIRY_MINUTES * 60
+	); // fallback to default
 	const navigate = useNavigate();
 
 	const { sendOtp, verifyOtp, isLoading, error, isAuthenticated } = useAuth();
@@ -36,8 +39,14 @@ export default function LoginPage() {
 
 	const handleSendOtp = async () => {
 		if (!email.trim()) return;
-		const success = await sendOtp(email.trim());
-		if (success) setStep("otp");
+		const result = await sendOtp(email.trim());
+		if (result.success) {
+			// Use server-provided expiry time if available, otherwise fallback to config
+			if (result.expiresIn) {
+				setOtpExpiryTime(result.expiresIn);
+			}
+			setStep("otp");
+		}
 	};
 
 	const handleVerifyOtp = async () => {
@@ -80,12 +89,14 @@ export default function LoginPage() {
 									<span className="font-medium">{email}</span>
 								</p>
 								<Timer
-									initial={
-										AUTH_CONFIG.OTP_EXPIRY_MINUTES * 60
-									}
+									initial={otpExpiryTime}
 									onExpire={() => {
 										setStep("email");
 										setOtp("");
+										// Reset to default for next attempt
+										setOtpExpiryTime(
+											AUTH_CONFIG.OTP_EXPIRY_MINUTES * 60
+										);
 									}}
 									className="justify-center"
 								/>
