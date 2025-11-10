@@ -143,8 +143,14 @@ export class UserAuthService {
 		try {
 			const result = await UserRepository.updateProfile(userId, updates);
 			return result !== null;
-		} catch (error) {
-			console.error("Error updating user profile:", error);
+		} catch (error: any) {
+			// Re-throw specific business logic errors to be handled by the controller
+			if (error.code === "USERNAME_EXISTS") {
+				throw error;
+			}
+
+			// Log unexpected service layer errors
+			console.error("Unexpected error in user profile service:", error);
 			return false;
 		}
 	}

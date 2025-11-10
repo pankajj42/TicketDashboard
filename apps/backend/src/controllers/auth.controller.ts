@@ -382,18 +382,31 @@ export class AuthController {
 				return;
 			}
 
-			const success = await UserAuthService.updateUserProfile(
-				req.user.userId,
-				{ username: trimmedUsername }
-			);
-
-			if (!success) {
-				ErrorHandler.handleBadRequestError(
-					res,
-					"Failed to update profile",
-					"UPDATE_FAILED"
+			try {
+				const success = await UserAuthService.updateUserProfile(
+					req.user.userId,
+					{ username: trimmedUsername }
 				);
-				return;
+
+				if (!success) {
+					ErrorHandler.handleBadRequestError(
+						res,
+						"Failed to update profile",
+						"UPDATE_FAILED"
+					);
+					return;
+				}
+			} catch (serviceError: any) {
+				if (serviceError.code === "USERNAME_EXISTS") {
+					ErrorHandler.handleBadRequestError(
+						res,
+						"This username is already taken. Please choose a different one.",
+						"USERNAME_EXISTS"
+					);
+					return;
+				}
+				// Re-throw other errors to be handled by the outer catch block
+				throw serviceError;
 			}
 
 			ResponseHelper.sendSuccess(res, {

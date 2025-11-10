@@ -64,9 +64,23 @@ export class UserRepository extends BaseRepository {
 					updatedAt: new Date(),
 				},
 			});
-		} catch (error) {
-			console.error("Error updating user profile:", error);
-			return null;
+		} catch (error: any) {
+			// Check for Prisma unique constraint violation
+			if (
+				error.code === "P2002" &&
+				error.meta?.target?.includes("username")
+			) {
+				// Don't log this as it's expected business logic (username conflict)
+				// Re-throw with a more specific error for username uniqueness
+				const uniqueError = new Error("Username already exists");
+				(uniqueError as any).code = "USERNAME_EXISTS";
+				throw uniqueError;
+			}
+
+			// Log unexpected database errors
+			console.error("Unexpected error updating user profile:", error);
+			// Re-throw other errors to be handled by the service layer
+			throw error;
 		}
 	}
 

@@ -32,27 +32,41 @@ export default function SettingsDialog({ children }: SettingsDialogProps) {
 		getUserDevices,
 		logoutFromDevice,
 		logoutFromAllDevices,
+		error: authError,
+		clearError,
 	} = useAuth();
 
 	const handleUsernameEdit = () => {
 		setNewUsername(user?.username || "");
 		setEditingUsername(true);
+		// Clear any previous errors when starting to edit
+		clearError();
 	};
 
 	const handleUsernameSave = async () => {
 		if (!newUsername.trim()) return;
 
 		try {
-			await updateProfile({ username: newUsername.trim() });
-			setEditingUsername(false);
+			const success = await updateProfile({
+				username: newUsername.trim(),
+			});
+
+			if (success) {
+				setEditingUsername(false);
+			}
+			// If update failed, keep editing mode open so user can try again
 		} catch (error) {
-			// Error handling will be done by the auth hook
+			// Error handling is done by the auth hook via toast messages
+			console.error("Username update failed:", error);
+			// Keep editing mode open so user can correct and try again
 		}
 	};
 
 	const handleUsernameCancel = () => {
 		setNewUsername("");
 		setEditingUsername(false);
+		// Clear any errors when canceling edit
+		clearError();
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -103,6 +117,8 @@ export default function SettingsDialog({ children }: SettingsDialogProps) {
 									onUsernameSave={handleUsernameSave}
 									onUsernameCancel={handleUsernameCancel}
 									onKeyDown={handleKeyDown}
+									error={authError}
+									onClearError={clearError}
 								/>
 							)}
 

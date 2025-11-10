@@ -12,6 +12,8 @@ type ProfileTabProps = {
 	onUsernameSave: () => void;
 	onUsernameCancel: () => void;
 	onKeyDown: (e: React.KeyboardEvent) => void;
+	error?: string | null;
+	onClearError?: () => void;
 };
 
 export function ProfileTab({
@@ -23,6 +25,8 @@ export function ProfileTab({
 	onUsernameSave,
 	onUsernameCancel,
 	onKeyDown,
+	error,
+	onClearError,
 }: ProfileTabProps) {
 	return (
 		<div className="space-y-6">
@@ -54,14 +58,27 @@ export function ProfileTab({
 							<div className="mt-1 space-y-2">
 								<Input
 									value={newUsername}
-									onChange={(e) =>
-										setNewUsername(e.target.value)
-									}
+									onChange={(e) => {
+										setNewUsername(e.target.value);
+										// Clear error when user starts typing
+										if (error && onClearError) {
+											onClearError();
+										}
+									}}
 									onKeyDown={onKeyDown}
 									placeholder="Enter new username"
 									autoFocus
-									className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600"
+									className={`bg-white dark:bg-gray-700 ${
+										error
+											? "border-red-500 focus:border-red-500"
+											: "border-gray-200 dark:border-gray-600"
+									}`}
 								/>
+								{error && (
+									<div className="text-red-600 text-sm">
+										{error}
+									</div>
+								)}
 								<div className="flex gap-2">
 									<Button
 										onClick={onUsernameSave}
