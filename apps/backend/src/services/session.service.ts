@@ -25,8 +25,6 @@ export class SessionService {
 		options: CreateSessionOptions
 	): Promise<SessionData> {
 		const sessionId = crypto.randomUUID();
-
-		// Use client fingerprint if provided, otherwise generate server-side
 		const deviceId =
 			options.deviceFingerprint ||
 			this.generateConsistentDeviceId(
@@ -38,15 +36,11 @@ export class SessionService {
 			userId: options.userId,
 			sessionId,
 		});
-
-		const refreshTokenPayload = {
+		const refreshToken = JwtService.generateRefreshToken({
 			userId: options.userId,
 			sessionId,
 			deviceId,
-		};
-
-		const refreshToken =
-			JwtService.generateRefreshToken(refreshTokenPayload);
+		});
 
 		// Store refresh token in database
 		const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -77,10 +71,7 @@ export class SessionService {
 		refreshToken: string
 	): Promise<{ accessToken: string } | null> {
 		try {
-			// Verify refresh token
-			const payload = JwtService.verifyRefreshToken(refreshToken);
-
-			// Check if refresh token exists in database
+			JwtService.verifyRefreshToken(refreshToken);
 			const storedToken =
 				await SessionRepository.findRefreshToken(refreshToken);
 

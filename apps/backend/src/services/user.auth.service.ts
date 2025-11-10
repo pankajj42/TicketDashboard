@@ -1,5 +1,5 @@
 import { OtpService } from "./otp.service.js";
-import { SessionService } from "./session.service.js";
+import { CreateSessionOptions, SessionService } from "./session.service.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import { UserMapper } from "../mappers/api.mappers.js";
 import type { ApiUser } from "@repo/shared";
@@ -16,14 +16,6 @@ export interface AuthResult {
 export interface LoginResult {
 	success: boolean;
 	message: string;
-}
-
-export interface CreateSessionOptions {
-	userId: string;
-	userAgent: string;
-	ipAddress: string;
-	deviceName?: string;
-	deviceFingerprint?: string;
 }
 
 export class UserAuthService {
@@ -67,7 +59,7 @@ export class UserAuthService {
 			ipAddress: sessionOptions.ipAddress,
 			deviceName: sessionOptions.deviceName,
 			deviceFingerprint: sessionOptions.deviceFingerprint,
-		});
+		} as CreateSessionOptions);
 
 		return {
 			success: true,

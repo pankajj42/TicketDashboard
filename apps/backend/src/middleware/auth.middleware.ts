@@ -3,7 +3,9 @@ import { JwtService } from "../services/jwt.service.js";
 import { SessionService } from "../services/session.service.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import { ErrorHandler } from "../utils/error-handler.js";
+import { ResponseHelper } from "../utils/response-helper.js";
 import type { AccessTokenPayload, ApiErrorResponse } from "@repo/shared";
+import config from "../config/env.js";
 
 // Enhanced user data for request object
 interface RequestUser extends AccessTokenPayload {
@@ -30,7 +32,7 @@ export const authenticateToken = async (
 	next: NextFunction
 ): Promise<void> => {
 	try {
-		const token = extractBearerToken(req);
+		const token = JwtService.extractBearerToken(req.headers.authorization);
 
 		if (!token) {
 			ErrorHandler.handleAuthError(
@@ -66,8 +68,8 @@ export const authenticateToken = async (
  * Rate limiting middleware for authentication endpoints
  */
 export const createAuthRateLimit = (
-	maxAttempts: number = 5,
-	windowMs: number = 15 * 60 * 1000 // 15 minutes
+	maxAttempts: number = config.USER_AUTH_ATTEMPTS_LIMIT,
+	windowMs: number = config.USER_AUTH_RATE_LIMIT_SECONDS * 1000
 ) => {
 	const attempts = new Map<string, { count: number; resetTime: number }>();
 
@@ -76,7 +78,7 @@ export const createAuthRateLimit = (
 		res: Response<ApiErrorResponse>,
 		next: NextFunction
 	): void => {
-		const clientId = getClientIdentifier(req);
+		const clientId = ResponseHelper.extractIpAddress(req);
 		const now = Date.now();
 
 		// Clean expired entries
@@ -91,9 +93,7 @@ export const createAuthRateLimit = (
 		}
 
 		if (userAttempts.count >= maxAttempts) {
-			const timeLeft = Math.ceil(
-				(userAttempts.resetTime - now) / 1000 / 60
-			);
+			const timeLeft = Math.ceil((userAttempts.resetTime - now) / 1000);
 			ErrorHandler.handleRateLimitError(res, timeLeft);
 			return;
 		}
@@ -101,25 +101,6 @@ export const createAuthRateLimit = (
 		userAttempts.count++;
 		next();
 	};
-};
-
-/**
- * Middleware to require user authentication
- */
-export const requireAuth = (
-	req: Request,
-	res: Response<ApiErrorResponse>,
-	next: NextFunction
-): void => {
-	if (!req.user) {
-		ErrorHandler.handleAuthError(
-			res,
-			"Authentication required",
-			"NOT_AUTHENTICATED"
-		);
-		return;
-	}
-	next();
 };
 
 /**
@@ -142,25 +123,12 @@ export const validateDeviceInfo = (
 	}
 
 	// Attach device info to request
-	(req as any).deviceInfo = {
-		userAgent,
-		ipAddress: getClientIdentifier(req),
-		deviceName: req.body.deviceInfo?.deviceName,
-		deviceFingerprint: req.body.deviceInfo?.deviceFingerprint,
-	};
+	(req as any).deviceInfo = ResponseHelper.extractDeviceInfo(req);
 
 	next();
 };
 
 // ===== HELPER FUNCTIONS =====
-
-/**
- * Extract bearer token from request headers
- */
-function extractBearerToken(req: Request): string | null {
-	const authHeader = req.headers.authorization;
-	return JwtService.extractBearerToken(authHeader);
-}
 
 /**
  * Validate token and return user data
@@ -181,19 +149,6 @@ async function validateTokenAndGetUser(
 		email: user.email,
 		username: user.username,
 	};
-}
-
-/**
- * Get client identifier for rate limiting
- */
-function getClientIdentifier(req: Request): string {
-	return (
-		req.ip ||
-		req.connection?.remoteAddress ||
-		req.socket?.remoteAddress ||
-		req.headers?.["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
-		"unknown"
-	);
 }
 
 /**

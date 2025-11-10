@@ -35,8 +35,18 @@ const config = {
 	// OTP Configuration
 	OTP_LENGTH: parseInt(process.env.OTP_LENGTH || "6"),
 	OTP_EXPIRY_MINUTES: parseInt(process.env.OTP_EXPIRY_MINUTES || "5"),
-	OTP_RATE_LIMIT_SECONDS: parseInt(
-		process.env.OTP_RATE_LIMIT_SECONDS || "60"
+	OTP_REREQUEST_RATE_LIMIT_SECONDS: parseInt(
+		process.env.OTP_REREQUEST_RATE_LIMIT_SECONDS || "60"
+	),
+	OTP_VERIFY_ATTEMPTS_LIMIT: parseInt(
+		process.env.OTP_VERIFY_ATTEMPTS_LIMIT || "5"
+	),
+
+	USER_AUTH_ATTEMPTS_LIMIT: parseInt(
+		process.env.USER_AUTH_ATTEMPTS_LIMIT || "5"
+	),
+	USER_AUTH_RATE_LIMIT_SECONDS: parseInt(
+		process.env.USER_AUTH_RATE_LIMIT_SECONDS || "60"
 	),
 
 	isDevelopment: (process.env.NODE_ENV || "development") === "development",

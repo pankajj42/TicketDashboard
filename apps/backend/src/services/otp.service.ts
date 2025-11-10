@@ -1,8 +1,14 @@
-import { UserRepository } from "../repositories/user.repository.js";
 import { redis } from "../lib/redis.js";
 import { queue } from "./queue.service.js";
 import config from "../config/env.js";
 import crypto from "crypto";
+
+interface OtpData {
+	code: string;
+	email: string;
+	attempts: number;
+	createdAt: number;
+}
 
 export class OtpService {
 	/**
@@ -20,9 +26,10 @@ export class OtpService {
 			// Check for existing valid OTP (rate limiting)
 			const existingOtp = await this.getOtpFromRedis(email);
 			if (existingOtp) {
-				const otpData = JSON.parse(existingOtp);
+				const otpData: OtpData = JSON.parse(existingOtp);
 				const timeSinceCreation = Date.now() - otpData.createdAt;
-				const rateLimitMs = config.OTP_RATE_LIMIT_SECONDS * 1000;
+				const rateLimitMs =
+					config.OTP_REREQUEST_RATE_LIMIT_SECONDS * 1000;
 
 				if (timeSinceCreation < rateLimitMs) {
 					return {
@@ -36,7 +43,7 @@ export class OtpService {
 			const otpCode = this.generateOtpCode();
 
 			// Store OTP in Redis with configured expiration
-			const otpData = {
+			const otpData: OtpData = {
 				code: otpCode,
 				email,
 				attempts: 0,
@@ -62,7 +69,7 @@ export class OtpService {
 		}
 	}
 
-	// Verify OTP (simplified - no user creation)
+	// Verify OTP
 	static async verifyOtp(
 		email: string,
 		code: string
@@ -80,10 +87,10 @@ export class OtpService {
 				};
 			}
 
-			const otpData = JSON.parse(otpDataStr);
+			const otpData: OtpData = JSON.parse(otpDataStr);
 
 			// Check attempt limits
-			if (otpData.attempts >= 3) {
+			if (otpData.attempts >= config.OTP_VERIFY_ATTEMPTS_LIMIT) {
 				// Remove OTP to prevent further attempts
 				await redis.del(`otp:${email}`);
 				return {
@@ -129,7 +136,9 @@ export class OtpService {
 			console.error("Error verifying OTP:", error);
 			throw new Error("Failed to verify OTP");
 		}
-	} // Helper: Get OTP from Redis
+	}
+
+	// Helper: Get OTP from Redis
 	private static async getOtpFromRedis(
 		email: string
 	): Promise<string | null> {

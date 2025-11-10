@@ -85,13 +85,4 @@ export class JwtService {
 
 		return parts[1] || null;
 	}
-
-	// Decode token without verification (for expired token inspection)
-	static decodeToken(token: string): any {
-		try {
-			return jwt.decode(token);
-		} catch {
-			return null;
-		}
-	}
 }

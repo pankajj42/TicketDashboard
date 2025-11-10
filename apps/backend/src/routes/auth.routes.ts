@@ -8,8 +8,8 @@ import {
 
 const router = Router();
 
-// Rate limiting for auth endpoints (5 attempts per 15 minutes)
-const authLimit = createAuthRateLimit(5, 15 * 60 * 1000);
+// Rate limiting for auth endpoints
+const authLimit = createAuthRateLimit();
 
 // Public routes (no authentication required)
 router.post("/login", authLimit, AuthController.login);

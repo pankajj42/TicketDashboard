@@ -10,13 +10,11 @@ export class ErrorHandler {
 		res: Response<ApiErrorResponse>,
 		error: z.ZodError
 	): void {
-		// Get the first validation error message for user-friendly display
-		const firstError = error.issues[0];
-		const userFriendlyMessage =
-			firstError?.message || "Invalid request data";
-
+		const message =
+			"Invalid request data; " +
+			error.issues.map((issue) => issue?.message || "").join("; ");
 		res.status(400).json({
-			error: userFriendlyMessage,
+			error: message,
 			code: "VALIDATION_ERROR",
 			details: error.issues,
 		});
@@ -84,7 +82,7 @@ export class ErrorHandler {
 		timeLeft: number
 	): void {
 		res.status(429).json({
-			error: `Too many attempts. Try again in ${timeLeft} minutes`,
+			error: `Too many attempts. Try again in ${timeLeft} seconds.`,
 			code: "RATE_LIMIT_EXCEEDED",
 		});
 	}
@@ -97,7 +95,6 @@ export class ErrorHandler {
 		error: unknown,
 		operation: string
 	): void {
-		// Handle validation errors first (no logging needed for user input errors)
 		if (error instanceof z.ZodError) {
 			this.handleValidationError(res, error);
 			return;
@@ -133,7 +130,6 @@ export class ErrorHandler {
 
 		// Log unexpected errors for debugging
 		console.error(`${operation} error:`, error);
-
 		this.handleInternalError(res, `Failed to ${operation}`);
 	}
 }

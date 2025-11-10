@@ -39,17 +39,6 @@ export class ResponseHelper {
 	}
 
 	/**
-	 * Send success message
-	 */
-	static sendMessage(
-		res: Response,
-		message: string,
-		statusCode: number = 200
-	): void {
-		res.status(statusCode).json({ message });
-	}
-
-	/**
 	 * Extract IP address from request
 	 */
 	static extractIpAddress(req: any): string {
