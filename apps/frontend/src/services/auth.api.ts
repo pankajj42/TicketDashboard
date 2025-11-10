@@ -10,6 +10,7 @@ import type {
 	LogoutDeviceResponse,
 	GetCurrentUserResponse,
 	ApiErrorResponse,
+	ApiUser,
 } from "@repo/shared";
 import { API_CONFIG } from "@/lib/constants";
 
@@ -107,6 +108,18 @@ class HttpClient {
 		headers?: Record<string, string>
 	): Promise<T> {
 		return this.request<T>(endpoint, { method: "DELETE", headers });
+	}
+
+	async put<T>(
+		endpoint: string,
+		body?: any,
+		headers?: Record<string, string>
+	): Promise<T> {
+		return this.request<T>(endpoint, {
+			method: "PUT",
+			body: JSON.stringify(body || {}),
+			headers,
+		});
 	}
 }
 
@@ -219,6 +232,22 @@ export class AuthApiService {
 	): Promise<LogoutDeviceResponse> {
 		return httpClient.delete<LogoutDeviceResponse>(
 			`${API_CONFIG.PREFIX}/devices/${sessionId}`,
+			{
+				Authorization: `Bearer ${accessToken}`,
+			}
+		);
+	}
+
+	/**
+	 * Update user profile
+	 */
+	static async updateProfile(
+		updates: { username: string },
+		accessToken: string
+	): Promise<{ success: boolean; user?: ApiUser }> {
+		return httpClient.put<{ success: boolean; user?: ApiUser }>(
+			`${API_CONFIG.PREFIX}/profile`,
+			updates,
 			{
 				Authorization: `Bearer ${accessToken}`,
 			}

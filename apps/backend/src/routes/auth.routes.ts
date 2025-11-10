@@ -27,5 +27,6 @@ router.post("/logout", AuthController.logout);
 router.get("/devices", AuthController.getDevices);
 router.delete("/devices/:sessionId", AuthController.logoutDevice);
 router.get("/me", AuthController.getCurrentUser);
+router.put("/profile", AuthController.updateProfile);
 
 export default router;

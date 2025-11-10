@@ -132,4 +132,20 @@ export class UserAuthService {
 
 		return { user, isNewUser };
 	}
+
+	/**
+	 * Update user profile information
+	 */
+	static async updateUserProfile(
+		userId: string,
+		updates: { username: string }
+	): Promise<boolean> {
+		try {
+			const result = await UserRepository.updateProfile(userId, updates);
+			return result !== null;
+		} catch (error) {
+			console.error("Error updating user profile:", error);
+			return false;
+		}
+	}
 }

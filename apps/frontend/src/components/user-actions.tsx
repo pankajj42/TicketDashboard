@@ -10,6 +10,7 @@ import {
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { AvatarSkeleton } from "./loading-skeletons";
 import { toast } from "sonner";
+import SettingsDialog from "./settings/settings-dialog";
 
 export default function UserActions() {
 	const { user, logout, isLoading } = useAuth();
@@ -20,15 +21,6 @@ export default function UserActions() {
 		} catch (error) {
 			console.error("Logout error:", error);
 			toast.error("Failed to logout. Please try again.");
-		}
-	};
-
-	const handleLogoutAll = async () => {
-		try {
-			await logout(true);
-		} catch (error) {
-			console.error("Logout all error:", error);
-			toast.error("Failed to logout from all devices. Please try again.");
 		}
 	};
 
@@ -80,13 +72,16 @@ export default function UserActions() {
 					<ShieldUser />
 					<span>Admin access</span>
 				</DropdownMenuItem>
-				<DropdownMenuItem
-					className="m-2 text-md text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"
-					disabled={isLoading}
-				>
-					<Settings />
-					<span>Settings</span>
-				</DropdownMenuItem>
+				<SettingsDialog>
+					<DropdownMenuItem
+						className="m-2 text-md text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"
+						disabled={isLoading}
+						onSelect={(e: Event) => e.preventDefault()} // Prevent dropdown from closing
+					>
+						<Settings />
+						<span>Settings</span>
+					</DropdownMenuItem>
+				</SettingsDialog>
 
 				<DropdownMenuSeparator />
 
@@ -97,14 +92,6 @@ export default function UserActions() {
 				>
 					<LogOutIcon />
 					<span>Sign out</span>
-				</DropdownMenuItem>
-				<DropdownMenuItem
-					onClick={handleLogoutAll}
-					disabled={isLoading}
-					className="m-2 text-md text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-				>
-					<LogOutIcon />
-					<span>Sign out all devices</span>
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>

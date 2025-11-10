@@ -329,4 +329,83 @@ export class AuthController {
 			ErrorHandler.handleError(res, error, "get current user");
 		}
 	}
+
+	/**
+	 * PUT /api/auth/profile - Update user profile
+	 */
+	static async updateProfile(req: Request, res: Response): Promise<void> {
+		try {
+			if (!req.user) {
+				ErrorHandler.handleAuthError(
+					res,
+					"Authentication required",
+					"NOT_AUTHENTICATED"
+				);
+				return;
+			}
+
+			const { username } = req.body;
+
+			// Basic validation
+			if (
+				!username ||
+				typeof username !== "string" ||
+				username.trim().length === 0
+			) {
+				ErrorHandler.handleBadRequestError(
+					res,
+					"Username is required and must be a non-empty string",
+					"INVALID_INPUT"
+				);
+				return;
+			}
+
+			// Validate username format (basic rules)
+			const trimmedUsername = username.trim();
+			if (trimmedUsername.length < 2 || trimmedUsername.length > 50) {
+				ErrorHandler.handleBadRequestError(
+					res,
+					"Username must be between 2 and 50 characters",
+					"INVALID_USERNAME_LENGTH"
+				);
+				return;
+			}
+
+			// Check for valid characters (letters, numbers, underscores, hyphens)
+			const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+			if (!usernameRegex.test(trimmedUsername)) {
+				ErrorHandler.handleBadRequestError(
+					res,
+					"Username can only contain letters, numbers, underscores, and hyphens",
+					"INVALID_USERNAME_FORMAT"
+				);
+				return;
+			}
+
+			const success = await UserAuthService.updateUserProfile(
+				req.user.userId,
+				{ username: trimmedUsername }
+			);
+
+			if (!success) {
+				ErrorHandler.handleBadRequestError(
+					res,
+					"Failed to update profile",
+					"UPDATE_FAILED"
+				);
+				return;
+			}
+
+			ResponseHelper.sendSuccess(res, {
+				success: true,
+				user: {
+					id: req.user.userId,
+					email: req.user.email,
+					username: trimmedUsername,
+				},
+			});
+		} catch (error) {
+			ErrorHandler.handleError(res, error, "update profile");
+		}
+	}
 }

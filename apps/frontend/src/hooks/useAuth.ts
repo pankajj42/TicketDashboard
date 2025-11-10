@@ -239,6 +239,138 @@ export const useAuth = () => {
 		}
 	}, [isAuthenticated, accessToken, refreshToken]);
 
+	/**
+	 * Update user profile information
+	 */
+	const updateProfile = useCallback(
+		async (updates: { username: string }): Promise<boolean> => {
+			if (!accessToken) return false;
+
+			try {
+				setLoading(true);
+				setError(null);
+
+				// Call update profile API (we'll need to implement this)
+				const response = await AuthApiService.updateProfile(
+					updates,
+					accessToken
+				);
+
+				if (response.success) {
+					// Update the user in the store
+					if (user) {
+						setAuth(
+							{ ...user, username: updates.username },
+							accessToken
+						);
+					}
+					toast.success("Profile updated successfully");
+					return true;
+				}
+				return false;
+			} catch (error) {
+				const errorMessage =
+					error instanceof ApiError
+						? error.message
+						: "Failed to update profile";
+				setError(errorMessage);
+				toast.error(errorMessage);
+				return false;
+			} finally {
+				setLoading(false);
+			}
+		},
+		[accessToken, user, setAuth, setLoading, setError]
+	);
+
+	/**
+	 * Get user's active devices
+	 */
+	const getUserDevices = useCallback(async (): Promise<any[]> => {
+		if (!accessToken) return [];
+
+		try {
+			const response = await AuthApiService.getDevices(accessToken);
+			return response.devices || [];
+		} catch (error) {
+			console.error("Failed to get devices:", error);
+			if (error instanceof ApiError && error.status === 401) {
+				// Try to refresh token
+				const refreshed = await refreshToken();
+				if (!refreshed) {
+					clearAuth();
+					navigate("/login", { replace: true });
+				}
+			}
+			return [];
+		}
+	}, [accessToken, refreshToken, clearAuth, navigate]);
+
+	/**
+	 * Logout from specific device
+	 */
+	const logoutFromDevice = useCallback(
+		async (sessionId: string): Promise<boolean> => {
+			if (!accessToken) return false;
+
+			try {
+				setLoading(true);
+				const response = await AuthApiService.logoutDevice(
+					sessionId,
+					accessToken
+				);
+
+				if (response.success) {
+					toast.success("Device signed out successfully");
+					return true;
+				}
+				return false;
+			} catch (error) {
+				const errorMessage =
+					error instanceof ApiError
+						? error.message
+						: "Failed to sign out device";
+				toast.error(errorMessage);
+				return false;
+			} finally {
+				setLoading(false);
+			}
+		},
+		[accessToken, setLoading]
+	);
+
+	/**
+	 * Logout from all devices
+	 */
+	const logoutFromAllDevices = useCallback(async (): Promise<number> => {
+		if (!accessToken) return 0;
+
+		try {
+			setLoading(true);
+			const response = await AuthApiService.logout(true, accessToken);
+
+			if (response.loggedOutDevices > 0) {
+				toast.success(
+					`Signed out from ${response.loggedOutDevices} device(s)`
+				);
+				// Clear auth state and redirect to login
+				clearAuth();
+				navigate("/login", { replace: true });
+			}
+
+			return response.loggedOutDevices;
+		} catch (error) {
+			const errorMessage =
+				error instanceof ApiError
+					? error.message
+					: "Failed to sign out from all devices";
+			toast.error(errorMessage);
+			return 0;
+		} finally {
+			setLoading(false);
+		}
+	}, [accessToken, setLoading, clearAuth, navigate]);
+
 	return {
 		// State
 		isAuthenticated,
@@ -257,6 +389,10 @@ export const useAuth = () => {
 		logout,
 		getCurrentUser,
 		checkAuth,
+		updateProfile,
+		getUserDevices,
+		logoutFromDevice,
+		logoutFromAllDevices,
 		clearError: () => setError(null),
 		reset,
 	};

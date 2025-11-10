@@ -49,6 +49,27 @@ export class UserRepository extends BaseRepository {
 		});
 	}
 
+	static async updateProfile(
+		id: string,
+		updates: { username: string }
+	): Promise<User | null> {
+		try {
+			return await super.prisma.user.update({
+				where: {
+					id,
+					isActive: true,
+				},
+				data: {
+					username: updates.username,
+					updatedAt: new Date(),
+				},
+			});
+		} catch (error) {
+			console.error("Error updating user profile:", error);
+			return null;
+		}
+	}
+
 	static async delete(id: string): Promise<User> {
 		return super.prisma.user.delete({
 			where: { id },

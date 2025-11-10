@@ -12,10 +12,10 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 const DashboardPage = () => {
 	const [columns, setColumns] = useState<Column[]>(DEFAULT_BOARD);
 
-	function handleAddCard(title: string, columnId: string) {
+	function handleAddCard(title: string) {
 		setColumns((prev) =>
 			prev.map((c) =>
-				c.id === columnId
+				c.id === "proposed"
 					? {
 							...c,
 							items: [{ id: uid("c"), title }, ...c.items],
@@ -29,7 +29,7 @@ const DashboardPage = () => {
 		<SidebarProvider>
 			<AppSidebar />
 			<main className="h-screen w-full flex flex-col">
-				<AppHeader columns={columns} onAddCard={handleAddCard} />
+				<AppHeader onAddCard={handleAddCard} />
 				<KanbanBoard columns={columns} setColumns={setColumns} />
 			</main>
 		</SidebarProvider>

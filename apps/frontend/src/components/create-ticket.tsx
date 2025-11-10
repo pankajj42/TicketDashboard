@@ -11,24 +11,18 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
-import { type Column } from "./kanban/kanban-utils";
 
 type CreateTicketProps = {
-	columns: Column[];
-	onAddCard: (title: string, columnId: string) => void;
+	onAddCard: (title: string) => void;
 };
 
-export default function CreateTicket({
-	columns,
-	onAddCard,
-}: CreateTicketProps) {
+export default function CreateTicket({ onAddCard }: CreateTicketProps) {
 	const [openNew, setOpenNew] = useState(false);
 	const [newTitle, setNewTitle] = useState("");
-	const [newColumnId, setNewColumnId] = useState(columns[0]?.id || "");
 
 	function handleAddCard() {
 		if (!newTitle.trim()) return;
-		onAddCard(newTitle, newColumnId);
+		onAddCard(newTitle);
 		setNewTitle("");
 		setOpenNew(false);
 	}
@@ -69,25 +63,6 @@ export default function CreateTicket({
 						autoFocus
 						className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-200 placeholder:text-gray-500 dark:placeholder:text-gray-400"
 					/>
-					<Label className="text-gray-900 dark:text-gray-200">
-						Column
-					</Label>
-					<select
-						className="border rounded px-2 py-1 bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-200"
-						value={newColumnId}
-						onChange={(e) => setNewColumnId(e.target.value)}
-						onKeyDown={handleKeyDown}
-					>
-						{columns.map((c) => (
-							<option
-								key={c.id}
-								value={c.id}
-								className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200"
-							>
-								{c.title}
-							</option>
-						))}
-					</select>
 				</div>
 
 				<DialogFooter>

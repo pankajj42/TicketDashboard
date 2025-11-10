@@ -1,18 +1,16 @@
 import { useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
-import { type Column } from "./kanban/kanban-utils";
 import CreateTicket from "./create-ticket";
 import UserActions from "./user-actions";
 import { ThemeToggle } from "./theme/theme-toggle";
 import { title } from "@repo/shared";
 
 type AppHeaderProps = {
-	columns: Column[];
-	onAddCard: (title: string, columnId: string) => void;
+	onAddCard: (title: string) => void;
 };
 
-export default function AppHeader({ columns, onAddCard }: AppHeaderProps) {
+export default function AppHeader({ onAddCard }: AppHeaderProps) {
 	const { toggleSidebar } = useSidebar();
 
 	return (
@@ -33,7 +31,7 @@ export default function AppHeader({ columns, onAddCard }: AppHeaderProps) {
 				</div>
 
 				<div className="flex items-center gap-3 pr-4">
-					<CreateTicket columns={columns} onAddCard={onAddCard} />
+					<CreateTicket onAddCard={onAddCard} />
 					<ThemeToggle />
 					<UserActions />
 				</div>
