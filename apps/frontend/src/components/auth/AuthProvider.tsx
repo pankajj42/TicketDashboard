@@ -7,15 +7,24 @@ interface AuthProviderProps {
 }
 
 export default function AuthProvider({ children }: AuthProviderProps) {
-	const { refreshToken, isRefreshing } = useAuth();
+	const { refreshToken, isRefreshing, isAuthenticated } = useAuth();
 	const [isInitialized, setIsInitialized] = useState(false);
 
 	useEffect(() => {
 		const initializeAuth = async () => {
 			try {
-				// Try to refresh token on app startup
-				// This will check if there's a valid refresh token cookie
-				await refreshToken();
+				// Only try to refresh token if user is not already authenticated
+				// This prevents unnecessary refresh calls after successful login
+				if (!isAuthenticated) {
+					console.log(
+						"Attempting to restore session from refresh token..."
+					);
+					await refreshToken();
+				} else {
+					console.log(
+						"User already authenticated, skipping token refresh"
+					);
+				}
 			} catch (error) {
 				// If refresh fails, user is not authenticated (which is fine)
 				console.log("No valid session found on startup");
@@ -24,8 +33,11 @@ export default function AuthProvider({ children }: AuthProviderProps) {
 			}
 		};
 
-		initializeAuth();
-	}, [refreshToken]);
+		// Only run initialization once on mount
+		if (!isInitialized) {
+			initializeAuth();
+		}
+	}, [refreshToken, isAuthenticated, isInitialized]);
 
 	// Show loading screen while checking authentication
 	if (!isInitialized || isRefreshing) {

@@ -11,6 +11,7 @@ import {
 	SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useState } from "react";
+import { useUser } from "@/store/auth.store";
 import LogoIcon from "./logo";
 
 // Menu items.
@@ -31,6 +32,7 @@ const items = [
 
 export function AppSidebar() {
 	const [selectedProject, setSelectedProject] = useState(0);
+	const user = useUser();
 
 	const onProjectSelect = (index: number) => {
 		setSelectedProject(index);
@@ -46,7 +48,7 @@ export function AppSidebar() {
 							TicketDash
 						</div>
 						<div className="text-sm text-gray-600 dark:text-gray-300 truncate">
-							Username
+							{user?.username || user?.email || "Loading..."}
 						</div>
 					</div>
 				</div>

@@ -110,6 +110,7 @@ export default function LoginPage() {
 										length={AUTH_CONFIG.OTP_LENGTH}
 										disabled={isLoading}
 										autoFocus
+										onEnterKey={handleVerifyOtp}
 									/>
 								</div>
 

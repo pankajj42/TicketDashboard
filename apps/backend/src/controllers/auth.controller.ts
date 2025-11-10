@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { UserAuthService } from "../services/user.auth.service.js";
 import { ErrorHandler } from "../utils/error-handler.js";
 import { ResponseHelper } from "../utils/response-helper.js";
+import config from "../config/env.js";
 import type {
 	LoginRequest,
 	LoginResponse,
@@ -103,9 +104,37 @@ export class AuthController {
 
 			ResponseHelper.sendSuccess(res, {
 				success: true,
-				user: result.user,
-				accessToken: result.accessToken,
-				isNewUser: result.isNewUser,
+				code: "LOGIN_SUCCESS",
+				data: {
+					user: result.user,
+					accessToken: result.accessToken,
+					timing: {
+						accessToken: {
+							expiresAt: new Date(
+								Date.now() +
+									config.ACCESS_TOKEN_EXPIRY_MINUTES *
+										60 *
+										1000
+							).toISOString(),
+							expiresIn: config.ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+							issuedAt: new Date().toISOString(),
+						},
+						refreshToken: {
+							expiresAt: new Date(
+								Date.now() +
+									config.REFRESH_TOKEN_EXPIRY_DAYS *
+										24 *
+										60 *
+										60 *
+										1000
+							).toISOString(),
+							expiresIn:
+								config.REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60,
+							issuedAt: new Date().toISOString(),
+						},
+					},
+					isNewUser: result.isNewUser,
+				},
 			});
 		} catch (error) {
 			ErrorHandler.handleError(res, error, "verify OTP");

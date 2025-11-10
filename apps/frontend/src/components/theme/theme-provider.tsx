@@ -26,33 +26,61 @@ export function ThemeProvider({
 	storageKey = "ui-theme",
 	...props
 }: ThemeProviderProps) {
-	const [theme, setTheme] = useState<Theme>(
-		() => (localStorage.getItem(storageKey) as Theme) || defaultTheme
-	);
+	const [theme, setTheme] = useState<Theme>(() => {
+		try {
+			const storedTheme = localStorage.getItem(storageKey) as Theme;
+			// Validate that the stored theme is one of the valid options
+			if (
+				storedTheme &&
+				["light", "dark", "system"].includes(storedTheme)
+			) {
+				return storedTheme;
+			}
+		} catch (error) {
+			// Handle cases where localStorage is not available
+			console.warn("Failed to read theme from localStorage:", error);
+		}
+		return defaultTheme;
+	});
 
 	useEffect(() => {
 		const root = window.document.documentElement;
+		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-		root.classList.remove("light", "dark");
+		const applyTheme = () => {
+			root.classList.remove("light", "dark");
 
+			if (theme === "system") {
+				const systemTheme = mediaQuery.matches ? "dark" : "light";
+				root.classList.add(systemTheme);
+				return;
+			}
+
+			root.classList.add(theme);
+		};
+
+		// Apply theme immediately
+		applyTheme();
+
+		// Listen for system theme changes only when theme is "system"
 		if (theme === "system") {
-			const systemTheme = window.matchMedia(
-				"(prefers-color-scheme: dark)"
-			).matches
-				? "dark"
-				: "light";
+			const handleChange = () => applyTheme();
+			mediaQuery.addEventListener("change", handleChange);
 
-			root.classList.add(systemTheme);
-			return;
+			return () => {
+				mediaQuery.removeEventListener("change", handleChange);
+			};
 		}
-
-		root.classList.add(theme);
 	}, [theme]);
 
 	const value = {
 		theme,
 		setTheme: (theme: Theme) => {
-			localStorage.setItem(storageKey, theme);
+			try {
+				localStorage.setItem(storageKey, theme);
+			} catch (error) {
+				console.warn("Failed to save theme to localStorage:", error);
+			}
 			setTheme(theme);
 		},
 	};

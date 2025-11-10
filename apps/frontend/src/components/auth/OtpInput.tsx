@@ -15,6 +15,7 @@ interface OtpInputProps {
 	disabled?: boolean;
 	autoFocus?: boolean;
 	className?: string;
+	onEnterKey?: () => void;
 }
 
 export default function OtpInput({
@@ -24,6 +25,7 @@ export default function OtpInput({
 	disabled = false,
 	autoFocus = true,
 	className,
+	onEnterKey,
 }: OtpInputProps) {
 	const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -65,7 +67,12 @@ export default function OtpInput({
 		index: number,
 		e: KeyboardEvent<HTMLInputElement>
 	) => {
-		if (e.key === "Backspace") {
+		if (e.key === "Enter") {
+			// Trigger onEnterKey if OTP is complete
+			if (onEnterKey && value.length === length) {
+				onEnterKey();
+			}
+		} else if (e.key === "Backspace") {
 			if (!value[index] && index > 0) {
 				// If current input is empty, move to previous and clear it
 				const newValue = value.split("");

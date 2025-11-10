@@ -33,6 +33,12 @@ export default function CreateTicket({
 		setOpenNew(false);
 	}
 
+	function handleKeyDown(e: React.KeyboardEvent) {
+		if (e.key === "Enter") {
+			handleAddCard();
+		}
+	}
+
 	return (
 		<Dialog open={openNew} onOpenChange={setOpenNew}>
 			<DialogTrigger asChild>
@@ -58,7 +64,9 @@ export default function CreateTicket({
 					<Input
 						value={newTitle}
 						onChange={(e) => setNewTitle(e.target.value)}
+						onKeyDown={handleKeyDown}
 						placeholder="Card title"
+						autoFocus
 						className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-200 placeholder:text-gray-500 dark:placeholder:text-gray-400"
 					/>
 					<Label className="text-gray-900 dark:text-gray-200">
@@ -68,6 +76,7 @@ export default function CreateTicket({
 						className="border rounded px-2 py-1 bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-200"
 						value={newColumnId}
 						onChange={(e) => setNewColumnId(e.target.value)}
+						onKeyDown={handleKeyDown}
 					>
 						{columns.map((c) => (
 							<option
