@@ -4,7 +4,7 @@ import { Menu } from "lucide-react";
 import { type Column } from "./kanban/kanban-utils";
 import CreateTicket from "./create-ticket";
 import UserActions from "./user-actions";
-import { ThemeToggle } from "./theme-toggle";
+import { ThemeToggle } from "./theme/theme-toggle";
 import { title } from "@repo/shared";
 
 type AppHeaderProps = {

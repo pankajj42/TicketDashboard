@@ -1,9 +1,9 @@
 import "./App.css";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
-import AuthProvider from "@/components/AuthProvider";
-import ProtectedRoute, { PublicRoute } from "@/components/ProtectedRoute";
+import AuthProvider from "@/components/auth/AuthProvider";
+import ProtectedRoute, { PublicRoute } from "@/components/auth/ProtectedRoute";
 import DashboardPage from "./routes/DashboardPage";
 import LoginPage from "./routes/LoginPage";
 import { Toaster } from "sonner";

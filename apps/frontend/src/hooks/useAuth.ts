@@ -178,7 +178,7 @@ export const useAuth = () => {
 				navigate(ROUTES.LOGIN, { replace: true });
 
 				// Don't show error for logout issues - user is trying to leave anyway
-				toast.success("Successfully logged out");
+				toast.success(SUCCESS_MESSAGES.LOGOUT_SUCCESS);
 			} finally {
 				setLoading(false);
 			}

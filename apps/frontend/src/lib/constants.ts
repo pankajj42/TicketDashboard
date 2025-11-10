@@ -19,7 +19,6 @@ export const AUTH_CONFIG = {
 export const ROUTES = {
 	LOGIN: "/login",
 	DASHBOARD: "/dashboard",
-	HOME: "/",
 } as const;
 
 // Local Storage Keys
