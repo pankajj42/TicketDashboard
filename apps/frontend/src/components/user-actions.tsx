@@ -25,15 +25,28 @@ export default function UserActions() {
 	const isAdmin = useIsAdminElevated();
 	// Logout handled via AsyncMenuItem spinner state
 
-	// Get user initials for avatar
+	// Derive initials: prefer username; fallback to email
 	const getUserInitials = () => {
-		if (!user?.email) return "U";
-		const email = user.email;
-		const parts = email.split("@")[0].split(".");
-		if (parts.length >= 2) {
-			return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+		if (!user) return "U";
+		const username = user.username?.trim();
+		if (username && username.length > 0) {
+			// Split on spaces, dots, underscores, or hyphens
+			const parts = username.split(/[\s._-]+/).filter(Boolean);
+			if (parts.length >= 2) {
+				return (parts[0][0] + parts[1][0]).toUpperCase();
+			}
+			// Single chunk username: take first two characters
+			return username.slice(0, 2).toUpperCase();
 		}
-		return email.charAt(0).toUpperCase();
+		// Fallback to email local-part logic
+		const email = user.email || "";
+		if (!email) return "U";
+		const local = email.split("@")[0];
+		const emailParts = local.split(/\.+/).filter(Boolean);
+		if (emailParts.length >= 2) {
+			return (emailParts[0][0] + emailParts[1][0]).toUpperCase();
+		}
+		return local.slice(0, 2).toUpperCase();
 	};
 
 	// Show skeleton only when user data is not yet available

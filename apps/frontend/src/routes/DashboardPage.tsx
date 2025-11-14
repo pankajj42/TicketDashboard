@@ -11,9 +11,10 @@ import type { TicketStatus } from "@repo/shared";
 import TicketDialog from "@/components/ticket/ticket-dialog";
 import { toast } from "sonner";
 import { CardSkeleton } from "@/components/loading-skeletons";
+import TicketCardsView from "@/components/ticket/ticket-cards-view";
 
 const DashboardPage = () => {
-	const { selectedProjectId } = useProjectStore();
+	const { selectedProjectId, viewMode } = useProjectStore();
 	const token = useAccessToken();
 	const [columns, setColumns] = useState<Column[]>([]);
 	const [loadingTickets, setLoadingTickets] = useState<boolean>(false);
@@ -93,7 +94,7 @@ const DashboardPage = () => {
 							))}
 						</div>
 					</div>
-				) : (
+				) : viewMode === "BOARD" ? (
 					<KanbanBoard
 						columns={columns}
 						setColumns={setColumns}
@@ -141,6 +142,13 @@ const DashboardPage = () => {
 						}}
 						onOpenTicket={(id) => setOpenTicketId(id)}
 					/>
+				) : (
+					<div className="flex-1 p-4 overflow-y-auto">
+						<TicketCardsView
+							mode={viewMode}
+							onOpen={(id) => setOpenTicketId(id)}
+						/>
+					</div>
 				)}
 				<TicketDialog
 					ticketId={openTicketId}

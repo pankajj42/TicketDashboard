@@ -46,10 +46,34 @@ export class TicketUpdateRepository extends BaseRepository {
 	}
 
 	static async listByTicketWithUser(ticketId: string) {
-		return super.prisma.ticketUpdate.findMany({
+		const updates = await super.prisma.ticketUpdate.findMany({
 			where: { ticketId },
 			orderBy: { createdAt: "desc" },
 			include: { updatedBy: { select: { id: true, username: true } } },
 		});
+		// Collect unique user ids referenced in assignment changes
+		const ids = new Set<string>();
+		for (const u of updates) {
+			if (u.oldAssignedToId) ids.add(u.oldAssignedToId);
+			if (u.newAssignedToId) ids.add(u.newAssignedToId);
+		}
+		const idList = [...ids];
+		const userMap: Record<string, { id: string; username: string }> = {};
+		if (idList.length > 0) {
+			const users = await super.prisma.user.findMany({
+				where: { id: { in: idList } },
+				select: { id: true, username: true },
+			});
+			for (const u of users) userMap[u.id] = u;
+		}
+		return updates.map((u) => ({
+			...u,
+			oldAssigneeName: u.oldAssignedToId
+				? (userMap[u.oldAssignedToId]?.username ?? u.oldAssignedToId)
+				: null,
+			newAssigneeName: u.newAssignedToId
+				? (userMap[u.newAssignedToId]?.username ?? u.newAssignedToId)
+				: null,
+		}));
 	}
 }

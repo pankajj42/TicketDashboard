@@ -75,6 +75,36 @@ export class TicketRepository extends BaseRepository {
 		});
 	}
 
+	static async listByCreator(userId: string) {
+		return super.prisma.ticket.findMany({
+			where: { createdById: userId },
+			orderBy: { createdAt: "desc" },
+			select: {
+				id: true,
+				title: true,
+				description: true,
+				status: true,
+				project: { select: { id: true, name: true } },
+				createdAt: true,
+			},
+		});
+	}
+
+	static async listByAssignee(userId: string) {
+		return super.prisma.ticket.findMany({
+			where: { assignedToId: userId },
+			orderBy: { createdAt: "desc" },
+			select: {
+				id: true,
+				title: true,
+				description: true,
+				status: true,
+				project: { select: { id: true, name: true } },
+				createdAt: true,
+			},
+		});
+	}
+
 	static async updateDetails(
 		ticketId: string,
 		data: { title?: string; description?: string }
@@ -192,6 +222,119 @@ export class TicketRepository extends BaseRepository {
 					});
 				}
 				return { ticket, lastUpdateId: statusUpdate.id };
+			},
+			{ timeout: 15000 }
+		);
+	}
+
+	static async changeAssigneeWithAudit(
+		ticketId: string,
+		actorId: string,
+		newAssignedToId: string | null
+	): Promise<{ ticket: Ticket; lastUpdateId: string }> {
+		return await super.prisma.$transaction(
+			async (tx) => {
+				const current = await tx.ticket.findUnique({
+					where: { id: ticketId },
+				});
+				if (!current) throw new Error("TICKET_NOT_FOUND");
+				const ticket = await tx.ticket.update({
+					where: { id: ticketId },
+					data: {
+						assignedTo: newAssignedToId
+							? { connect: { id: newAssignedToId } }
+							: { disconnect: true },
+					},
+				});
+				const update = await tx.ticketUpdate.create({
+					data: {
+						ticket: { connect: { id: ticket.id } },
+						updatedBy: { connect: { id: actorId } },
+						type: "ASSIGNMENT_CHANGED" as UpdateType,
+						content: JSON.stringify({
+							from: current.assignedToId || null,
+							to: ticket.assignedToId || null,
+						}),
+						oldAssignedToId: current.assignedToId || null,
+						newAssignedToId: ticket.assignedToId || null,
+					},
+				});
+				return { ticket, lastUpdateId: update.id };
+			},
+			{ timeout: 15000 }
+		);
+	}
+
+	static async updateAssigneeAndStatusWithAudit(
+		ticketId: string,
+		actorId: string,
+		updates: { newAssignedToId?: string | null; newStatus?: TicketStatus }
+	): Promise<{ ticket: Ticket; lastUpdateId: string }> {
+		return await super.prisma.$transaction(
+			async (tx) => {
+				const current = await tx.ticket.findUnique({
+					where: { id: ticketId },
+				});
+				if (!current) throw new Error("TICKET_NOT_FOUND");
+				const data: Prisma.TicketUpdateInput = {} as any;
+				if (typeof updates.newStatus !== "undefined") {
+					(data as any).status = updates.newStatus;
+				}
+				if (typeof updates.newAssignedToId !== "undefined") {
+					(data as any).assignedTo = updates.newAssignedToId
+						? { connect: { id: updates.newAssignedToId } }
+						: { disconnect: true };
+				}
+				const ticket = await tx.ticket.update({
+					where: { id: ticketId },
+					data: data as any,
+				});
+
+				let lastUpdateId = "";
+				// Status change audit
+				if (
+					typeof updates.newStatus !== "undefined" &&
+					updates.newStatus !== current.status
+				) {
+					const statusUpdate = await tx.ticketUpdate.create({
+						data: {
+							ticket: { connect: { id: ticket.id } },
+							updatedBy: { connect: { id: actorId } },
+							type: "STATUS_CHANGED" as UpdateType,
+							content: JSON.stringify({
+								from: current.status,
+								to: updates.newStatus,
+							}),
+							oldStatus: current.status,
+							newStatus: updates.newStatus,
+						},
+					});
+					lastUpdateId = statusUpdate.id;
+				}
+
+				// Assignment change audit
+				if (
+					typeof updates.newAssignedToId !== "undefined" &&
+					(ticket.assignedToId || null) !==
+						(updates.newAssignedToId || null)
+				) {
+					const assignUpdate = await tx.ticketUpdate.create({
+						data: {
+							ticket: { connect: { id: ticket.id } },
+							updatedBy: { connect: { id: actorId } },
+							type: "ASSIGNMENT_CHANGED" as UpdateType,
+							content: JSON.stringify({
+								from: current.assignedToId || null,
+								to: ticket.assignedToId || null,
+							}),
+							oldAssignedToId: current.assignedToId || null,
+							newAssignedToId: ticket.assignedToId || null,
+						},
+					});
+					lastUpdateId = assignUpdate.id || lastUpdateId;
+				}
+
+				return { ticket, lastUpdateId };
 			},
 			{ timeout: 15000 }
 		);

@@ -1,4 +1,11 @@
-import { Bell, FolderDot, FolderOpenDot, Loader2 } from "lucide-react";
+import {
+	Bell,
+	FolderDot,
+	FolderOpenDot,
+	Loader2,
+	ClipboardList,
+	ClipboardCheck,
+} from "lucide-react";
 
 import {
 	Sidebar,
@@ -10,7 +17,7 @@ import {
 	SidebarMenuButton,
 	SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
 	useAccessToken,
 	useIsAdminElevated,
@@ -19,6 +26,7 @@ import {
 import { useProjectStore } from "@/store/project.store";
 import LogoIcon from "./logo";
 import CreateProjectButton from "./admin/create-project";
+import EditProjectDialog from "./admin/edit-project-dialog";
 import { TextSkeleton } from "./loading-skeletons";
 
 export function AppSidebar() {
@@ -26,6 +34,8 @@ export function AppSidebar() {
 		projects,
 		selectedProjectId,
 		setSelected,
+		viewMode,
+		setViewMode,
 		loadProjects,
 		toggleSubscribe,
 		loadingProjects,
@@ -60,6 +70,40 @@ export function AppSidebar() {
 				</div>
 			</SidebarHeader>
 			<SidebarContent className="custom-scrollbar bg-gray-50 dark:bg-gray-950">
+				<SidebarGroup>
+					<SidebarGroupContent>
+						<SidebarMenu>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									asChild
+									isActive={viewMode === "CREATED"}
+								>
+									<a
+										href="#"
+										onClick={() => setViewMode("CREATED")}
+									>
+										<ClipboardList className="mr-2" />
+										<span>Created Tickets</span>
+									</a>
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									asChild
+									isActive={viewMode === "ASSIGNED"}
+								>
+									<a
+										href="#"
+										onClick={() => setViewMode("ASSIGNED")}
+									>
+										<ClipboardCheck className="mr-2" />
+										<span>Assigned Tickets</span>
+									</a>
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+						</SidebarMenu>
+					</SidebarGroupContent>
+				</SidebarGroup>
 				<SidebarHeader>
 					<div className="px-3 text-lg font-semibold text-gray-500 dark:text-gray-400">
 						Projects
@@ -93,17 +137,46 @@ export function AppSidebar() {
 									>
 										<a
 											href="#"
-											onClick={() =>
-												onProjectSelect(p.id)
-											}
+											className="flex items-center gap-2"
+											onClick={() => {
+												setViewMode("BOARD");
+												onProjectSelect(p.id);
+											}}
 										>
+											{isAdmin && (
+												<button
+													title="Edit project"
+													className="h-7 w-7 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-800"
+													onClick={(e) => {
+														e.preventDefault();
+														const evt =
+															new CustomEvent(
+																"project:edit",
+																{
+																	detail: {
+																		id: p.id,
+																		name: p.name,
+																		description:
+																			p.description ??
+																			"",
+																	},
+																}
+															);
+														window.dispatchEvent(
+															evt
+														);
+													}}
+												>
+													✎
+												</button>
+											)}
 											{selectedProjectId === p.id ? (
-												<FolderOpenDot className="mr-2" />
+												<FolderOpenDot className="" />
 											) : (
-												<FolderDot className="mr-2 opacity-50" />
+												<FolderDot className="opacity-50" />
 											)}
 											<span>{p.name}</span>
-											<span className="ml-auto">
+											<span className="ml-auto flex items-center">
 												<button
 													title={
 														p.isSubscribed
@@ -144,6 +217,8 @@ export function AppSidebar() {
 					</SidebarGroupContent>
 				</SidebarGroup>
 			</SidebarContent>
+			{/* Mount project edit dialog once so custom events can open it */}
+			{isAdmin && <EditProjectDialog />}
 		</Sidebar>
 	);
 }

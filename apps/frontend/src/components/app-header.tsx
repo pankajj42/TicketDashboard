@@ -5,7 +5,6 @@ import CreateTicket from "./create-ticket";
 import UserActions from "./user-actions";
 import NotificationsBell from "./common/notifications-bell";
 import { ThemeToggle } from "./theme/theme-toggle";
-import { title } from "@repo/shared";
 import { useProjectStore } from "@/store/project.store";
 import { TextSkeleton } from "./loading-skeletons";
 import AdminCountdown from "./admin/admin-countdown";

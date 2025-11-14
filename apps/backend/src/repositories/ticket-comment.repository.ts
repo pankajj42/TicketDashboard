@@ -47,13 +47,23 @@ export class TicketCommentRepository extends BaseRepository {
 		ticketId: string,
 		limit = 50,
 		cursor?: string
-	): Promise<{ comments: TicketComment[]; nextCursor?: string }> {
+	): Promise<{
+		comments: Array<
+			TicketComment & {
+				author: { id: string; username: string; email: string };
+			}
+		>;
+		nextCursor?: string;
+	}> {
 		const where = { ticketId };
 		const comments = await super.prisma.ticketComment.findMany({
 			where,
 			orderBy: { createdAt: "desc" },
 			take: limit + 1,
 			...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+			include: {
+				author: { select: { id: true, username: true, email: true } },
+			},
 		});
 		let nextCursor: string | undefined;
 		if (comments.length > limit) {

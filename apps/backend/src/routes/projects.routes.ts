@@ -35,6 +35,52 @@ router.get("/", async (req, res, next) => {
 	}
 });
 
+router.get("/:id", async (req, res, next) => {
+	try {
+		const project = await ProjectService.getById(req.params.id);
+		if (!project) return res.status(404).json({ error: "Not found" });
+		res.json({ project });
+	} catch (e) {
+		next(e);
+	}
+});
+
+// List project subscribers (admin only)
+router.get(
+	"/:id/subscribers",
+	attachAdminStatus,
+	ensureAdmin,
+	async (req, res, next) => {
+		try {
+			const users = await ProjectService.getSubscribers(
+				req.params.id as string
+			);
+			res.json({ users });
+		} catch (e) {
+			next(e);
+		}
+	}
+);
+
+router.patch("/:id", attachAdminStatus, ensureAdmin, async (req, res, next) => {
+	try {
+		const parsed = z
+			.object({
+				name: z.string().min(2).max(100).optional(),
+				description: z.string().max(2000).nullable().optional(),
+			})
+			.parse(req.body);
+		const project = await ProjectService.updateProject(
+			req.user!.userId,
+			req.params.id as string,
+			parsed
+		);
+		res.json({ project });
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.post("/:id/subscribe", async (req, res, next) => {
 	try {
 		await ProjectService.subscribe(req.params.id, req.user!.userId);

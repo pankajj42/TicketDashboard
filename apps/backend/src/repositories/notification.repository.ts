@@ -15,8 +15,8 @@ export class NotificationRepository extends BaseRepository {
 			data: rows.map((r) => ({
 				recipientId: r.recipientId,
 				message: r.message,
-				ticketUpdateId: r.ticketUpdateId ?? null,
-				projectCreatedId: r.projectCreatedId ?? null,
+				ticketUpdateId: r.ticketUpdateId || null,
+				projectCreatedId: r.projectCreatedId || null,
 			})),
 			skipDuplicates: true,
 		});
@@ -36,8 +36,8 @@ export class NotificationRepository extends BaseRepository {
 				data: {
 					recipientId: r.recipientId,
 					message: r.message,
-					ticketUpdateId: r.ticketUpdateId ?? null,
-					projectCreatedId: r.projectCreatedId ?? null,
+					ticketUpdateId: r.ticketUpdateId || null,
+					projectCreatedId: r.projectCreatedId || null,
 				},
 			})
 		);

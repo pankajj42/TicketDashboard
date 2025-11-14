@@ -14,6 +14,7 @@ import {
 
 import { TicketRepository } from "../repositories/ticket.repository.js";
 import { TicketUpdateRepository } from "../repositories/ticket-update.repository.js";
+import { z } from "zod";
 
 const router = Router();
 
@@ -74,6 +75,27 @@ router.patch(
 	}
 );
 
+// Place specific routes before parameterized /tickets/:ticketId to avoid conflicts
+router.get("/tickets/created", async (req, res, next) => {
+	try {
+		const userId = req.user!.userId;
+		const tickets = await TicketRepository.listByCreator(userId);
+		res.json({ tickets });
+	} catch (e) {
+		next(e);
+	}
+});
+
+router.get("/tickets/assigned", async (req, res, next) => {
+	try {
+		const userId = req.user!.userId;
+		const tickets = await TicketRepository.listByAssignee(userId);
+		res.json({ tickets });
+	} catch (e) {
+		next(e);
+	}
+});
+
 router.get("/tickets/:ticketId", async (req, res, next) => {
 	try {
 		const ticketId = req.params.ticketId;
@@ -100,5 +122,54 @@ router.get(
 		}
 	}
 );
+
+// Change assignee (admin only)
+router.patch(
+	"/tickets/:ticketId/assignee",
+	attachAdminStatus,
+	ensureAdmin,
+	async (req, res, next) => {
+		try {
+			const body = z
+				.object({ userId: z.string().uuid().nullable().optional() })
+				.parse(req.body);
+			const updated = await TicketService.changeAssignee(
+				req.params.ticketId,
+				req.user!.userId,
+				body
+			);
+			res.json({ ticket: updated });
+		} catch (e) {
+			next(e);
+		}
+	}
+);
+
+// Combined assignee + status update (admin only)
+router.patch(
+	"/tickets/:ticketId/assignee-status",
+	attachAdminStatus,
+	ensureAdmin,
+	async (req, res, next) => {
+		try {
+			const body = z
+				.object({
+					userId: z.string().uuid().nullable().optional(),
+					status: ChangeTicketStatusSchema.shape.status.optional(),
+				})
+				.parse(req.body);
+			const updated = await TicketService.changeAssigneeAndStatus(
+				req.params.ticketId,
+				req.user!.userId,
+				body
+			);
+			res.json({ ticket: updated });
+		} catch (e) {
+			next(e);
+		}
+	}
+);
+
+// end specific routes
 
 export default router;

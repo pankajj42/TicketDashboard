@@ -22,6 +22,13 @@ export class ProjectRepository extends BaseRepository {
 		return super.prisma.project.findUnique({ where: { id } });
 	}
 
+	static async update(
+		id: string,
+		data: { name?: string; description?: string | null }
+	): Promise<Project> {
+		return super.prisma.project.update({ where: { id }, data });
+	}
+
 	static async subscribe(projectId: string, userId: string): Promise<void> {
 		await super.prisma.project.update({
 			where: { id: projectId },

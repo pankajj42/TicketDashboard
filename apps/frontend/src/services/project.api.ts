@@ -32,4 +32,24 @@ export class ProjectApiService {
 			{ Authorization: `Bearer ${accessToken}` }
 		);
 	}
+
+	static update(
+		projectId: string,
+		body: { name?: string; description?: string | null },
+		accessToken: string
+	) {
+		return httpClient.patch<{ project: any }>(
+			`/projects/${projectId}`,
+			body,
+			{ Authorization: `Bearer ${accessToken}` }
+		);
+	}
+
+	static getSubscribers(projectId: string, accessToken: string) {
+		return httpClient.get<{
+			users: Array<{ id: string; email: string; username: string }>;
+		}>(`/projects/${projectId}/subscribers`, {
+			Authorization: `Bearer ${accessToken}`,
+		});
+	}
 }

@@ -49,4 +49,55 @@ export class TicketApiService {
 			{ Authorization: `Bearer ${accessToken}` }
 		);
 	}
+
+	static assign(
+		ticketId: string,
+		body: { userId?: string | null },
+		accessToken: string
+	) {
+		return httpClient.patch<{ ticket: any }>(
+			`/tickets/${ticketId}/assignee`,
+			body,
+			{ Authorization: `Bearer ${accessToken}` }
+		);
+	}
+
+	static assignAndStatus(
+		ticketId: string,
+		body: {
+			userId?: string | null;
+			status?: "PROPOSED" | "TODO" | "INPROGRESS" | "DONE" | "DEPLOYED";
+		},
+		accessToken: string
+	) {
+		return httpClient.patch<{ ticket: any }>(
+			`/tickets/${ticketId}/assignee-status`,
+			body,
+			{ Authorization: `Bearer ${accessToken}` }
+		);
+	}
+
+	static listCreated(accessToken: string) {
+		return httpClient.get<{
+			tickets: Array<{
+				id: string;
+				title: string;
+				description: string;
+				status: string;
+				project: { id: string; name: string };
+			}>;
+		}>(`/tickets/created`, { Authorization: `Bearer ${accessToken}` });
+	}
+
+	static listAssigned(accessToken: string) {
+		return httpClient.get<{
+			tickets: Array<{
+				id: string;
+				title: string;
+				description: string;
+				status: string;
+				project: { id: string; name: string };
+			}>;
+		}>(`/tickets/assigned`, { Authorization: `Bearer ${accessToken}` });
+	}
 }

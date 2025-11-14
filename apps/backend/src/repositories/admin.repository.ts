@@ -45,50 +45,56 @@ export class AdminRepository extends BaseRepository {
 		ipAddress?: string;
 		userAgent?: string;
 	}): Promise<AdminElevation> {
-		return await super.prisma.$transaction(async (tx) => {
-			await tx.refreshToken.deleteMany({
-				where: {
-					userId: params.userId,
-					sessionId: { not: params.sessionId },
-				},
-			});
-			const elevation = await tx.adminElevation.create({
-				data: {
-					user: { connect: { id: params.userId } },
-					sessionId: params.sessionId,
-					jti: params.jti,
-					expiresAt: params.expiresAt,
-					ipAddress: params.ipAddress,
-					userAgent: params.userAgent,
-				},
-			});
-			await tx.user.update({
-				where: { id: params.userId },
-				data: {
-					adminElevatedSessionId: params.sessionId,
-					adminElevatedUntil: params.expiresAt,
-				},
-			});
-			return elevation;
-		});
+		return await super.prisma.$transaction(
+			async (tx) => {
+				await tx.refreshToken.deleteMany({
+					where: {
+						userId: params.userId,
+						sessionId: { not: params.sessionId },
+					},
+				});
+				const elevation = await tx.adminElevation.create({
+					data: {
+						user: { connect: { id: params.userId } },
+						sessionId: params.sessionId,
+						jti: params.jti,
+						expiresAt: params.expiresAt,
+						ipAddress: params.ipAddress,
+						userAgent: params.userAgent,
+					},
+				});
+				await tx.user.update({
+					where: { id: params.userId },
+					data: {
+						adminElevatedSessionId: params.sessionId,
+						adminElevatedUntil: params.expiresAt,
+					},
+				});
+				return elevation;
+			},
+			{ timeout: 15000 }
+		);
 	}
 
 	static async revokeWithTransaction(params: {
 		userId: string;
 		elevationId: string;
 	}): Promise<void> {
-		await super.prisma.$transaction(async (tx) => {
-			await tx.adminElevation.update({
-				where: { id: params.elevationId },
-				data: { revokedAt: new Date() },
-			});
-			await tx.user.update({
-				where: { id: params.userId },
-				data: {
-					adminElevatedSessionId: null,
-					adminElevatedUntil: null,
-				},
-			});
-		});
+		await super.prisma.$transaction(
+			async (tx) => {
+				await tx.adminElevation.update({
+					where: { id: params.elevationId },
+					data: { revokedAt: new Date() },
+				});
+				await tx.user.update({
+					where: { id: params.userId },
+					data: {
+						adminElevatedSessionId: null,
+						adminElevatedUntil: null,
+					},
+				});
+			},
+			{ timeout: 15000 }
+		);
 	}
 }

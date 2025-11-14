@@ -10,6 +10,7 @@ import projectRoutes from "./routes/projects.routes.js";
 import ticketRoutes from "./routes/tickets.routes.js";
 import commentRoutes from "./routes/comments.routes.js";
 import notificationRoutes from "./routes/notifications.routes.js";
+import usersRoutes from "./routes/users.routes.js";
 import { Realtime } from "./services/realtime.service.js";
 import CleanupService from "./services/cleanup.service.js";
 import { redis } from "./lib/redis.js";
@@ -44,6 +45,7 @@ app.use("/api/projects", projectRoutes);
 app.use("/api", ticketRoutes);
 app.use("/api", commentRoutes);
 app.use("/api", notificationRoutes);
+app.use("/api", usersRoutes);
 
 // Health check endpoint
 app.get("/api/health", async (req, res) => {

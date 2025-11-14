@@ -11,12 +11,16 @@ export type ProjectItem = {
 	isSubscribed?: boolean;
 };
 
+type ViewMode = "BOARD" | "CREATED" | "ASSIGNED";
+
 interface ProjectState {
 	projects: ProjectItem[];
 	selectedProjectId: string | null;
+	viewMode: ViewMode;
 	loadingProjects: boolean;
 	subscriptionLoading: Record<string, boolean>;
 	setSelected: (id: string | null) => void;
+	setViewMode: (mode: ViewMode) => void;
 	loadProjects: () => Promise<void>;
 	toggleSubscribe: (projectId: string) => Promise<void>;
 }
@@ -24,9 +28,11 @@ interface ProjectState {
 export const useProjectStore = create<ProjectState>((set, get) => ({
 	projects: [],
 	selectedProjectId: null,
+	viewMode: "BOARD",
 	loadingProjects: false,
 	subscriptionLoading: {},
 	setSelected: (id) => set({ selectedProjectId: id }),
+	setViewMode: (mode) => set({ viewMode: mode }),
 	loadProjects: async () => {
 		const token = useAuthStore.getState().accessToken;
 		if (!token) return;
