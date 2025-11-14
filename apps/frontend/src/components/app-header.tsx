@@ -3,16 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import CreateTicket from "./create-ticket";
 import UserActions from "./user-actions";
+import NotificationsBell from "./common/notifications-bell";
 import { ThemeToggle } from "./theme/theme-toggle";
 import { title } from "@repo/shared";
+import { useProjectStore } from "@/store/project.store";
+import { TextSkeleton } from "./loading-skeletons";
 import AdminCountdown from "./admin/admin-countdown";
 
-type AppHeaderProps = {
-	onAddCard: (title: string) => void;
-};
-
-export default function AppHeader({ onAddCard }: AppHeaderProps) {
+export default function AppHeader() {
 	const { toggleSidebar } = useSidebar();
+	const { projects, selectedProjectId, loadingProjects } = useProjectStore();
+	const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
 	return (
 		<div className="shrink-0 p-4 border-b bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800">
@@ -26,14 +27,31 @@ export default function AppHeader({ onAddCard }: AppHeaderProps) {
 						<Menu className="h-6 w-6 text-gray-600 dark:text-gray-400" />
 						<span className="sr-only">Toggle Sidebar</span>
 					</Button>
-					<h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
-						{title}
-					</h1>
+					<div className="flex flex-col min-w-[200px]">
+						{loadingProjects ? (
+							<>
+								<TextSkeleton lines={1} className="w-40" />
+								<TextSkeleton lines={1} className="w-64 mt-1" />
+							</>
+						) : (
+							<>
+								<h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+									{selectedProject?.name || "None"}
+								</h1>
+								{selectedProject?.description ? (
+									<div className="text-sm text-gray-600 dark:text-gray-400">
+										{selectedProject.description}
+									</div>
+								) : null}
+							</>
+						)}
+					</div>
 				</div>
 
 				<div className="flex items-center gap-3 pr-4">
 					<AdminCountdown />
-					<CreateTicket onAddCard={onAddCard} />
+					<NotificationsBell />
+					<CreateTicket />
 					<ThemeToggle />
 					<UserActions />
 				</div>

@@ -6,6 +6,7 @@ export * from "./auth/schemas.js";
 export * from "./auth/types.js";
 export * from "./auth/timing.js";
 export * from "./errors.js";
+export * from "./tickets/schemas.js";
 
 // Utility functions
 export const formatDate = (date: Date): string => {

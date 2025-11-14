@@ -90,6 +90,16 @@ export class UserRepository extends BaseRepository {
 		});
 	}
 
+	static async findAllActiveLite(): Promise<
+		Array<{ id: string; email: string; username: string }>
+	> {
+		const users = await super.prisma.user.findMany({
+			where: { isActive: true },
+			select: { id: true, email: true, username: true },
+		});
+		return users;
+	}
+
 	static async existsByEmail(email: string): Promise<boolean> {
 		const user = await super.prisma.user.findUnique({
 			where: { email },

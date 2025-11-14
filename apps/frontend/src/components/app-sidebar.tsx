@@ -1,4 +1,4 @@
-import { FolderDot, FolderOpenDot } from "lucide-react";
+import { Bell, FolderDot, FolderOpenDot, Loader2 } from "lucide-react";
 
 import {
 	Sidebar,
@@ -10,32 +10,38 @@ import {
 	SidebarMenuButton,
 	SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useState } from "react";
-import { useUser } from "@/store/auth.store";
+import { useEffect, useState } from "react";
+import {
+	useAccessToken,
+	useIsAdminElevated,
+	useUser,
+} from "@/store/auth.store";
+import { useProjectStore } from "@/store/project.store";
 import LogoIcon from "./logo";
-
-// Menu items.
-const items = [
-	{
-		title: "Project 1",
-		url: "#",
-	},
-	{
-		title: "Project 2",
-		url: "#",
-	},
-	{
-		title: "Project 3",
-		url: "#",
-	},
-];
+import CreateProjectButton from "./admin/create-project";
+import { TextSkeleton } from "./loading-skeletons";
 
 export function AppSidebar() {
-	const [selectedProject, setSelectedProject] = useState(0);
+	const {
+		projects,
+		selectedProjectId,
+		setSelected,
+		loadProjects,
+		toggleSubscribe,
+		loadingProjects,
+		subscriptionLoading,
+	} = useProjectStore();
 	const user = useUser();
+	const token = useAccessToken();
+	const isAdmin = useIsAdminElevated();
 
-	const onProjectSelect = (index: number) => {
-		setSelectedProject(index);
+	useEffect(() => {
+		if (!token) return;
+		loadProjects();
+	}, [token, loadProjects]);
+
+	const onProjectSelect = (id: string) => {
+		setSelected(id);
 	};
 
 	return (
@@ -61,25 +67,75 @@ export function AppSidebar() {
 				</SidebarHeader>
 				<SidebarGroup>
 					<SidebarGroupContent className="custom-scrollbar">
+						{isAdmin && (
+							<div className="px-3 pb-2">
+								<CreateProjectButton />
+							</div>
+						)}
 						<SidebarMenu>
-							{items.map((item, index) => (
-								<SidebarMenuItem key={item.title}>
+							{loadingProjects && (
+								<div className="px-3 py-2 space-y-2">
+									<TextSkeleton lines={1} />
+									<TextSkeleton lines={1} />
+									<TextSkeleton lines={1} />
+								</div>
+							)}
+							{!loadingProjects && projects.length === 0 && (
+								<div className="px-3 py-4 text-sm text-gray-600 dark:text-gray-400">
+									No projects yet
+								</div>
+							)}
+							{projects.map((p) => (
+								<SidebarMenuItem key={p.id}>
 									<SidebarMenuButton
 										asChild
-										isActive={selectedProject === index}
+										isActive={selectedProjectId === p.id}
 									>
 										<a
-											href={item.url}
+											href="#"
 											onClick={() =>
-												onProjectSelect(index)
+												onProjectSelect(p.id)
 											}
 										>
-											{selectedProject === index ? (
+											{selectedProjectId === p.id ? (
 												<FolderOpenDot className="mr-2" />
 											) : (
 												<FolderDot className="mr-2 opacity-50" />
 											)}
-											<span>{item.title}</span>
+											<span>{p.name}</span>
+											<span className="ml-auto">
+												<button
+													title={
+														p.isSubscribed
+															? "Unsubscribe"
+															: "Subscribe"
+													}
+													className="rounded p-1 hover:bg-gray-200 dark:hover:bg-gray-800 disabled:opacity-50"
+													onClick={(e) => {
+														e.preventDefault();
+														toggleSubscribe(p.id);
+													}}
+													disabled={
+														!!subscriptionLoading[
+															p.id
+														]
+													}
+												>
+													{subscriptionLoading[
+														p.id
+													] ? (
+														<Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+													) : (
+														<Bell
+															className={
+																p.isSubscribed
+																	? "text-yellow-500"
+																	: "text-gray-400"
+															}
+														/>
+													)}
+												</button>
+											</span>
 										</a>
 									</SidebarMenuButton>
 								</SidebarMenuItem>

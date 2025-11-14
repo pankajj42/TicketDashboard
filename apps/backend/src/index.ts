@@ -6,6 +6,11 @@ import cookieParser from "cookie-parser";
 import { title } from "@repo/shared";
 import { prisma } from "./lib/prisma.js";
 import authRoutes from "./routes/auth.routes.js";
+import projectRoutes from "./routes/projects.routes.js";
+import ticketRoutes from "./routes/tickets.routes.js";
+import commentRoutes from "./routes/comments.routes.js";
+import notificationRoutes from "./routes/notifications.routes.js";
+import { Realtime } from "./services/realtime.service.js";
 import CleanupService from "./services/cleanup.service.js";
 import { redis } from "./lib/redis.js";
 import { queue } from "./services/queue.service.js";
@@ -23,7 +28,7 @@ app.use(
 	cors({
 		origin: config.isDevelopment ? "http://localhost:5173" : false,
 		credentials: true, // Allow cookies
-		methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+		methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 		allowedHeaders: ["Content-Type", "Authorization"],
 	})
 );
@@ -35,6 +40,10 @@ app.use(cookieParser());
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/projects", projectRoutes);
+app.use("/api", ticketRoutes);
+app.use("/api", commentRoutes);
+app.use("/api", notificationRoutes);
 
 // Health check endpoint
 app.get("/api/health", async (req, res) => {
@@ -61,7 +70,40 @@ app.use(
 		res: express.Response,
 		next: express.NextFunction
 	) => {
+		// If headers already sent by a previous handler, delegate to default error handler
+		if (res.headersSent) {
+			return next(err);
+		}
 		console.error("Unhandled error:", err);
+
+		// Handle known Prisma errors (e.g., unique constraint violations)
+		if (err && typeof err === "object" && typeof err.code === "string") {
+			// P2002: Unique constraint failed
+			if (err.code === "P2002") {
+				const target = Array.isArray(err?.meta?.target)
+					? err.meta.target.join(", ")
+					: String(err?.meta?.target || "");
+				const isProjectName = target.includes("name");
+				res.status(409).json({
+					error: isProjectName
+						? "Project name already exists"
+						: "Unique constraint violation",
+					code: isProjectName
+						? "PROJECT_NAME_EXISTS"
+						: "UNIQUE_VIOLATION",
+					details: { target },
+				});
+				return;
+			}
+			// P2028: Transaction already closed / timed out
+			if (err.code === "P2028") {
+				res.status(504).json({
+					error: "Operation timed out, please retry",
+					code: "TX_TIMEOUT",
+				});
+				return;
+			}
+		}
 
 		const status = err.status || 500;
 		const code = err.code || "INTERNAL_ERROR";
@@ -94,9 +136,8 @@ process.on("SIGINT", async () => {
 	gracefulShutdown("SIGINT");
 });
 
-app.listen(config.PORT, () => {
-	console.log(`🚀 Server running on port ${config.PORT}`);
+Realtime.attach(app, Number(config.PORT));
+console.log(`🚀 Server running with realtime on port ${config.PORT}`);
 
-	// Start cleanup service (runs every hour)
-	CleanupService.start(60);
-});
+// Start cleanup service (runs every hour)
+CleanupService.start(60);

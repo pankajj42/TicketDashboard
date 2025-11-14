@@ -10,9 +10,15 @@ import { useDroppable } from "@dnd-kit/core";
 
 type Props = {
 	column: Column;
+	onOpen?: (id: string) => void;
+	disabledCardIds?: string[];
 };
 
-export default function KanbanColumn({ column }: Props) {
+export default function KanbanColumn({
+	column,
+	onOpen,
+	disabledCardIds = [],
+}: Props) {
 	// ✅ make the entire column a droppable region
 	const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -49,7 +55,14 @@ export default function KanbanColumn({ column }: Props) {
 						<div className="space-y-3">
 							<AnimatePresence>
 								{column.items.map((item) => (
-									<SortableCard key={item.id} item={item} />
+									<SortableCard
+										key={item.id}
+										item={item}
+										onOpen={onOpen}
+										disabled={disabledCardIds.includes(
+											item.id
+										)}
+									/>
 								))}
 							</AnimatePresence>
 						</div>
@@ -57,7 +70,7 @@ export default function KanbanColumn({ column }: Props) {
 
 					{column.items.length === 0 && (
 						<div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-							Drop cards here
+							No tickets in this
 						</div>
 					)}
 				</CardContent>

@@ -11,20 +11,44 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
+import { useProjectStore } from "@/store/project.store";
+import { useAccessToken } from "@/store/auth.store";
+import { TicketApiService } from "@/services/ticket.api";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
-type CreateTicketProps = {
-	onAddCard: (title: string) => void;
-};
-
-export default function CreateTicket({ onAddCard }: CreateTicketProps) {
+export default function CreateTicket() {
 	const [openNew, setOpenNew] = useState(false);
 	const [newTitle, setNewTitle] = useState("");
+	const [description, setDescription] = useState("");
+	const [isSubmitting, setIsSubmitting] = useState(false);
+	const { selectedProjectId } = useProjectStore();
+	const token = useAccessToken();
 
-	function handleAddCard() {
-		if (!newTitle.trim()) return;
-		onAddCard(newTitle);
-		setNewTitle("");
-		setOpenNew(false);
+	async function handleAddCard() {
+		if (!newTitle.trim() || !selectedProjectId || !token || isSubmitting)
+			return;
+		try {
+			setIsSubmitting(true);
+			await TicketApiService.create(
+				selectedProjectId,
+				{
+					title: newTitle.trim(),
+					description: description.trim() || "",
+				},
+				token
+			);
+			toast.success("Ticket created");
+			setNewTitle("");
+			setDescription("");
+			setOpenNew(false);
+			// Notify dashboard to refetch tickets
+			window.dispatchEvent(new CustomEvent("tickets:refresh"));
+		} catch (e: any) {
+			toast.error(e?.message || "Failed to create ticket");
+		} finally {
+			setIsSubmitting(false);
+		}
 	}
 
 	function handleKeyDown(e: React.KeyboardEvent) {
@@ -63,14 +87,32 @@ export default function CreateTicket({ onAddCard }: CreateTicketProps) {
 						autoFocus
 						className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-200 placeholder:text-gray-500 dark:placeholder:text-gray-400"
 					/>
+					<Label className="text-gray-900 dark:text-gray-200 mt-2">
+						Description
+					</Label>
+					<Input
+						value={description}
+						onChange={(e) => setDescription(e.target.value)}
+						placeholder="Short description"
+						className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-200 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+					/>
 				</div>
 
 				<DialogFooter>
 					<Button
 						onClick={handleAddCard}
+						disabled={isSubmitting}
+						aria-busy={isSubmitting}
 						className="bg-gray-600 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600"
 					>
-						Create
+						{isSubmitting ? (
+							<span className="inline-flex items-center">
+								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+								Creating...
+							</span>
+						) : (
+							"Create"
+						)}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

@@ -47,6 +47,7 @@ model User {
   createdTickets     Ticket[]       @relation("TicketCreator")
   assignedTickets    Ticket[]       @relation("TicketAssignee")
   ticketUpdates      TicketUpdate[] @relation("TicketUpdateUser")
+  ticketComments     TicketComment[] @relation("TicketCommentAuthor")
   projectsSubscribed Project[]      @relation("ProjectSubscribers")
   notifications      Notification[] @relation("NotificationRecipient")
   
@@ -93,6 +94,7 @@ model Ticket {
   createdBy   User           @relation("TicketCreator", fields: [createdById], references: [id])
   assignedTo  User?          @relation("TicketAssignee", fields: [assignedToId], references: [id])
   updates     TicketUpdate[] @relation("TicketUpdates")
+  comments    TicketComment[] @relation("TicketComments")
 
   @@map("tickets")
   @@index([projectId])
@@ -122,6 +124,22 @@ model TicketUpdate {
   @@map("ticket_updates")
   @@index([ticketId])
   @@index([updatedById])
+  @@index([createdAt])
+}
+
+model TicketComment {
+  id         String   @id @default(uuid())
+  ticketId   String
+  authorId   String
+  body       String
+  createdAt  DateTime @default(now())
+
+  ticket     Ticket   @relation("TicketComments", fields: [ticketId], references: [id], onDelete: Cascade)
+  author     User     @relation("TicketCommentAuthor", fields: [authorId], references: [id])
+
+  @@map("ticket_comments")
+  @@index([ticketId])
+  @@index([authorId])
   @@index([createdAt])
 }
 

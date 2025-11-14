@@ -16,9 +16,18 @@ import { createPortal } from "react-dom";
 type KanbanBoardProps = {
 	columns: Column[];
 	setColumns: React.Dispatch<React.SetStateAction<Column[]>>;
+	onMove?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
+	onOpenTicket?: (id: string) => void;
+	disabledCardIds?: string[];
 };
 
-export default function KanbanBoard({ columns, setColumns }: KanbanBoardProps) {
+export default function KanbanBoard({
+	columns,
+	setColumns,
+	onMove,
+	onOpenTicket,
+	disabledCardIds = [],
+}: KanbanBoardProps) {
 	const [activeCard, setActiveCard] = useState<CardItem | null>(null);
 
 	const sensors = useSensors(useSensor(PointerSensor));
@@ -41,6 +50,11 @@ export default function KanbanBoard({ columns, setColumns }: KanbanBoardProps) {
 		if (!over) return;
 		if (active.id === over.id) return;
 
+		// Derive next columns without side-effects (StrictMode double invokes updater)
+		let movedId: string | null = null;
+		let fromColumnId: string | null = null;
+		let toColumnId: string | null = null;
+
 		setColumns((prev) => {
 			const next = JSON.parse(JSON.stringify(prev)) as Column[];
 			let sourceColIdx = -1,
@@ -61,7 +75,6 @@ export default function KanbanBoard({ columns, setColumns }: KanbanBoardProps) {
 				});
 			});
 
-			// If dropped onto a column container (no card), detect column by id
 			if (destColIdx === -1) {
 				const maybeCol = next.findIndex(
 					(c) => c.id === (over.id as string)
@@ -73,10 +86,23 @@ export default function KanbanBoard({ columns, setColumns }: KanbanBoardProps) {
 			}
 
 			if (sourceColIdx === -1 || destColIdx === -1) return next;
+			fromColumnId = next[sourceColIdx].id;
+			toColumnId = next[destColIdx].id;
 			const [moved] = next[sourceColIdx].items.splice(sourceItemIdx, 1);
 			next[destColIdx].items.splice(destItemIdx, 0, moved);
+			movedId = moved.id;
 			return next;
 		});
+
+		// Perform side-effects AFTER state update (avoids StrictMode double firing)
+		if (
+			movedId &&
+			fromColumnId &&
+			toColumnId &&
+			fromColumnId !== toColumnId
+		) {
+			onMove?.(movedId, fromColumnId, toColumnId);
+		}
 	}
 
 	return (
@@ -93,7 +119,11 @@ export default function KanbanBoard({ columns, setColumns }: KanbanBoardProps) {
 						<div key={col.id} className="md:min-w-0">
 							{/* We expose the column id as a drop target id (so dropping on empty space works) */}
 							<div id={col.id}>
-								<KanbanColumn column={col} />
+								<KanbanColumn
+									column={col}
+									onOpen={onOpenTicket}
+									disabledCardIds={disabledCardIds}
+								/>
 							</div>
 						</div>
 					))}

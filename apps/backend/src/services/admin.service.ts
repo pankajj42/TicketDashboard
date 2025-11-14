@@ -42,32 +42,18 @@ export class AdminService {
 			throw new Error("ADMIN_ELEVATION_ACTIVE");
 		}
 
-		// Revoke all other sessions
-		await SessionRepository.deleteAllForUserExceptSession(
-			options.userId,
-			options.sessionId
-		);
-
-		// Create AdminElevation record
+		// Create elevation and update pointers atomically
 		const jti = crypto.randomUUID();
 		const expiresAt = new Date(
 			now.getTime() + config.ADMIN_PRIVILEGE_EXPIRY_MINUTES * 60 * 1000
 		);
-
-		await AdminRepository.createElevation({
-			id: crypto.randomUUID(),
-			user: { connect: { id: options.userId } },
+		await AdminRepository.elevateWithTransaction({
+			userId: options.userId,
 			sessionId: options.sessionId,
 			jti,
 			expiresAt,
 			ipAddress: options.ipAddress,
 			userAgent: options.userAgent,
-		});
-
-		// Update user pointers
-		await UserRepository.update(options.userId, {
-			adminElevatedSessionId: options.sessionId,
-			adminElevatedUntil: expiresAt,
 		});
 
 		// Redis allowlist
@@ -111,11 +97,10 @@ export class AdminService {
 			throw new Error("ADMIN_ELEVATION_NOT_FOUND");
 		}
 
-		// Revoke DB state
-		await AdminRepository.revokeElevationById(active.id);
-		await UserRepository.update(options.userId, {
-			adminElevatedSessionId: null,
-			adminElevatedUntil: null,
+		// Revoke DB state atomically
+		await AdminRepository.revokeWithTransaction({
+			userId: options.userId,
+			elevationId: active.id,
 		});
 
 		// Clear Redis allowlist

@@ -19,7 +19,17 @@ function App() {
 				storageKey="ticketdash-ui-theme"
 			>
 				<AuthProvider>
-					<Toaster position="top-right" richColors closeButton />
+					<Toaster
+						position="top-right"
+						richColors
+						closeButton
+						offset={16}
+						visibleToasts={8}
+						toastOptions={{
+							className: "shadow-lg",
+							style: { marginTop: "8px" },
+						}}
+					/>
 					<Routes>
 						{/* Public routes - redirect to dashboard if authenticated */}
 						<Route
