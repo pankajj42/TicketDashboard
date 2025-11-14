@@ -1,13 +1,10 @@
 import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
-	DialogTrigger,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Settings } from "lucide-react";
 import { useUser } from "@/store/auth.store";
 import { useAuth } from "@/hooks/useAuth";
 import { ProfileTab } from "./profile-tab";
@@ -15,15 +12,20 @@ import { SecurityTab } from "./security-tab";
 import { SettingsSidebar } from "./settings-sidebar";
 
 type SettingsDialogProps = {
-	children?: React.ReactNode;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
 };
 
 type Tab = "profile" | "security";
 
-export default function SettingsDialog({ children }: SettingsDialogProps) {
-	const [open, setOpen] = useState(false);
+export default function SettingsDialog({
+	open,
+	onOpenChange,
+}: SettingsDialogProps) {
 	const [activeTab, setActiveTab] = useState<Tab>("profile");
 	const [editingUsername, setEditingUsername] = useState(false);
+	const [savingUsername, setSavingUsername] = useState(false);
+	const [securityBusy, setSecurityBusy] = useState(false);
 	const [newUsername, setNewUsername] = useState("");
 
 	const user = useUser();
@@ -47,6 +49,7 @@ export default function SettingsDialog({ children }: SettingsDialogProps) {
 		if (!newUsername.trim()) return;
 
 		try {
+			setSavingUsername(true);
 			const success = await updateProfile({
 				username: newUsername.trim(),
 			});
@@ -59,6 +62,8 @@ export default function SettingsDialog({ children }: SettingsDialogProps) {
 			// Error handling is done by the auth hook via toast messages
 			console.error("Username update failed:", error);
 			// Keep editing mode open so user can correct and try again
+		} finally {
+			setSavingUsername(false);
 		}
 	};
 
@@ -78,19 +83,7 @@ export default function SettingsDialog({ children }: SettingsDialogProps) {
 	};
 
 	return (
-		<Dialog open={open} onOpenChange={setOpen}>
-			<DialogTrigger asChild>
-				{children || (
-					<Button
-						variant="ghost"
-						size="sm"
-						className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-					>
-						<Settings className="h-4 w-4" />
-					</Button>
-				)}
-			</DialogTrigger>
-
+		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-[800px] h-[600px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 p-0 flex flex-col">
 				<DialogHeader className="px-6 py-4 border-b border-gray-200 dark:border-gray-600 shrink-0">
 					<DialogTitle className="text-gray-900 dark:text-gray-200">
@@ -102,6 +95,9 @@ export default function SettingsDialog({ children }: SettingsDialogProps) {
 					<SettingsSidebar
 						activeTab={activeTab}
 						onTabChange={setActiveTab}
+						disabled={
+							savingUsername || editingUsername || securityBusy
+						}
 					/>
 
 					{/* Content */}
@@ -119,6 +115,7 @@ export default function SettingsDialog({ children }: SettingsDialogProps) {
 									onKeyDown={handleKeyDown}
 									error={authError}
 									onClearError={clearError}
+									savingUsername={savingUsername}
 								/>
 							)}
 
@@ -127,6 +124,7 @@ export default function SettingsDialog({ children }: SettingsDialogProps) {
 									getUserDevices={getUserDevices}
 									logoutFromDevice={logoutFromDevice}
 									logoutFromAllDevices={logoutFromAllDevices}
+									onBusyChange={setSecurityBusy}
 								/>
 							)}
 						</div>

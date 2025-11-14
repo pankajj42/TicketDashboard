@@ -18,6 +18,7 @@ import {
 } from "@/store/auth.store";
 import { AuthApiService, ApiError } from "@/services/auth.api";
 import { ERROR_MESSAGES, SUCCESS_MESSAGES, ROUTES } from "@/lib/constants";
+import { getFriendlyErrorMessage } from "@/lib/error-codes";
 import type { ApiUser } from "@repo/shared";
 
 export const useAuth = () => {
@@ -58,12 +59,13 @@ export const useAuth = () => {
 				}
 				return { success: false };
 			} catch (error) {
-				const errorMessage =
-					error instanceof ApiError
-						? error.message
-						: ERROR_MESSAGES.SERVER_ERROR;
-
-				setError(errorMessage);
+				const apiErr = error as unknown as ApiError | undefined;
+				const msg = getFriendlyErrorMessage(
+					apiErr?.code,
+					apiErr?.message || ERROR_MESSAGES.SERVER_ERROR,
+					apiErr?.details
+				);
+				setError(msg);
 				return { success: false };
 			} finally {
 				setLoading(false);
@@ -97,12 +99,14 @@ export const useAuth = () => {
 				}
 				return false;
 			} catch (error) {
-				const errorMessage =
-					error instanceof ApiError
-						? error.message
-						: "Failed to verify OTP. Please try again.";
-
-				setError(errorMessage);
+				const apiErr = error as unknown as ApiError | undefined;
+				const msg = getFriendlyErrorMessage(
+					apiErr?.code,
+					apiErr?.message ||
+						"Failed to verify OTP. Please try again.",
+					apiErr?.details
+				);
+				setError(msg);
 				return false;
 			} finally {
 				setLoading(false);
@@ -156,8 +160,6 @@ export const useAuth = () => {
 	const logout = useCallback(
 		async (logoutAll: boolean = false): Promise<void> => {
 			try {
-				setLoading(true);
-
 				// Only call logout API if we have a valid access token
 				// If token is expired/invalid, just clear local state
 				if (accessToken) {
@@ -165,8 +167,8 @@ export const useAuth = () => {
 						await AuthApiService.logout(logoutAll, accessToken);
 					} catch (logoutError) {
 						// If logout fails due to invalid token, just continue with local cleanup
-						console.log(
-							"Server logout failed (token may be expired), continuing with local cleanup:",
+						console.error(
+							"[auth] logout: server logout failed (token may be expired)",
 							logoutError
 						);
 					}
@@ -181,18 +183,16 @@ export const useAuth = () => {
 						: SUCCESS_MESSAGES.LOGOUT_SUCCESS
 				);
 			} catch (error) {
-				console.error("Logout failed:", error);
+				console.error("[auth] logout failed", error);
 				// Even if logout fails on server, clear local auth state
 				clearAuth();
 				navigate(ROUTES.LOGIN, { replace: true });
 
 				// Don't show error for logout issues - user is trying to leave anyway
 				toast.success(SUCCESS_MESSAGES.LOGOUT_SUCCESS);
-			} finally {
-				setLoading(false);
 			}
 		},
-		[setLoading, clearAuth, navigate, accessToken]
+		[clearAuth, navigate, accessToken]
 	);
 
 	/**
@@ -205,7 +205,7 @@ export const useAuth = () => {
 			const response = await AuthApiService.getCurrentUser(accessToken);
 			return response.user;
 		} catch (error) {
-			console.error("Get current user failed:", error);
+			console.error("[auth] getCurrentUser failed", error);
 			if (error instanceof ApiError && error.status === 401) {
 				// Try to refresh token
 				const refreshed = await refreshToken();
@@ -247,7 +247,7 @@ export const useAuth = () => {
 			if (!accessToken) return false;
 
 			try {
-				setLoading(true);
+				// Local flows should not toggle global loading
 				setError(null);
 
 				// Call update profile API (we'll need to implement this)
@@ -269,18 +269,18 @@ export const useAuth = () => {
 				}
 				return false;
 			} catch (error) {
-				const errorMessage =
-					error instanceof ApiError
-						? error.message
-						: "Failed to update profile";
-				setError(errorMessage);
-				toast.error(errorMessage);
+				const apiErr = error as unknown as ApiError | undefined;
+				const msg = getFriendlyErrorMessage(
+					apiErr?.code,
+					apiErr?.message || "Failed to update profile",
+					apiErr?.details
+				);
+				setError(msg);
+				toast.error(msg);
 				return false;
-			} finally {
-				setLoading(false);
 			}
 		},
-		[accessToken, user, setAuth, setLoading, setError]
+		[accessToken, user, setAuth, setError]
 	);
 
 	/**
@@ -293,7 +293,7 @@ export const useAuth = () => {
 			const response = await AuthApiService.getDevices(accessToken);
 			return response.devices || [];
 		} catch (error) {
-			console.error("Failed to get devices:", error);
+			console.error("[auth] getDevices failed", error);
 			if (error instanceof ApiError && error.status === 401) {
 				// Try to refresh token
 				const refreshed = await refreshToken();
@@ -314,7 +314,6 @@ export const useAuth = () => {
 			if (!accessToken) return false;
 
 			try {
-				setLoading(true);
 				const response = await AuthApiService.logoutDevice(
 					sessionId,
 					accessToken
@@ -332,11 +331,9 @@ export const useAuth = () => {
 						: "Failed to sign out device";
 				toast.error(errorMessage);
 				return false;
-			} finally {
-				setLoading(false);
 			}
 		},
-		[accessToken, setLoading]
+		[accessToken]
 	);
 
 	/**
@@ -346,7 +343,6 @@ export const useAuth = () => {
 		if (!accessToken) return 0;
 
 		try {
-			setLoading(true);
 			const response = await AuthApiService.logout(true, accessToken);
 
 			if (response.loggedOutDevices > 0) {
@@ -366,10 +362,8 @@ export const useAuth = () => {
 					: "Failed to sign out from all devices";
 			toast.error(errorMessage);
 			return 0;
-		} finally {
-			setLoading(false);
 		}
-	}, [accessToken, setLoading, clearAuth, navigate]);
+	}, [accessToken, clearAuth, navigate]);
 
 	return {
 		// State

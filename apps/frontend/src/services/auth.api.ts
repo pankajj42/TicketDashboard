@@ -11,6 +11,7 @@ import type {
 	GetCurrentUserResponse,
 	ApiErrorResponse,
 	ApiUser,
+	UpdateProfileRequest,
 } from "@repo/shared";
 import { API_CONFIG } from "@/lib/constants";
 
@@ -52,36 +53,91 @@ class HttpClient {
 			},
 		};
 
-		try {
-			const response = await fetch(url, config);
-			const data = await response.json();
+		// Retry with basic backoff and timeout support
+		let attempt = 0;
+		let lastError: unknown;
 
-			if (!response.ok) {
-				const errorData = data as ApiErrorResponse;
-				throw new ApiError(
-					errorData.error || "An error occurred",
-					response.status,
-					errorData.code,
-					errorData.details
-				);
+		while (attempt < API_CONFIG.MAX_RETRY_ATTEMPTS) {
+			const controller = new AbortController();
+			const timeout = setTimeout(
+				() => controller.abort(),
+				API_CONFIG.TIMEOUT
+			);
+
+			try {
+				const response = await fetch(url, {
+					...config,
+					signal: controller.signal,
+				});
+				clearTimeout(timeout);
+
+				const data = await response.json();
+
+				if (!response.ok) {
+					const errorData = data as ApiErrorResponse;
+					// Retry only on transient errors
+					if (
+						response.status >= 500 ||
+						response.status === 429 ||
+						response.status === 408
+					) {
+						attempt++;
+						if (attempt < API_CONFIG.MAX_RETRY_ATTEMPTS) {
+							await new Promise((r) =>
+								setTimeout(r, API_CONFIG.RETRY_DELAY_MS)
+							);
+							continue;
+						}
+					}
+
+					throw new ApiError(
+						errorData.error || "An error occurred",
+						response.status,
+						errorData.code,
+						errorData.details
+					);
+				}
+
+				return data as T;
+			} catch (error) {
+				clearTimeout(timeout);
+				lastError = error;
+				// AbortError or network error: retry
+				if (
+					(error as any)?.name === "AbortError" ||
+					(error instanceof TypeError &&
+						error.message.includes("fetch"))
+				) {
+					attempt++;
+					if (attempt < API_CONFIG.MAX_RETRY_ATTEMPTS) {
+						await new Promise((r) =>
+							setTimeout(r, API_CONFIG.RETRY_DELAY_MS)
+						);
+						continue;
+					}
+				}
+
+				if (error instanceof ApiError) throw error;
+
+				// Fallthrough after retries exhausted
+				if (
+					error instanceof TypeError &&
+					error.message.includes("fetch")
+				) {
+					throw new ApiError(
+						"Network error. Please check your connection.",
+						0
+					);
+				}
+
+				throw new ApiError("An unexpected error occurred", 500);
 			}
-
-			return data;
-		} catch (error) {
-			if (error instanceof ApiError) {
-				throw error;
-			}
-
-			// Network or other errors
-			if (error instanceof TypeError && error.message.includes("fetch")) {
-				throw new ApiError(
-					"Network error. Please check your connection.",
-					0
-				);
-			}
-
-			throw new ApiError("An unexpected error occurred", 500);
 		}
+
+		// If loop exits without return, throw last error
+		throw lastError instanceof Error
+			? lastError
+			: new ApiError("Request failed", 500);
 	}
 
 	async get<T>(
@@ -242,7 +298,7 @@ export class AuthApiService {
 	 * Update user profile
 	 */
 	static async updateProfile(
-		updates: { username: string },
+		updates: UpdateProfileRequest,
 		accessToken: string
 	): Promise<{ success: boolean; user?: ApiUser }> {
 		return httpClient.put<{ success: boolean; user?: ApiUser }>(

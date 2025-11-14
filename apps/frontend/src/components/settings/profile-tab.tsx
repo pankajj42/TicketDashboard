@@ -1,5 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
+import { AsyncButton } from "@/components/common/async-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -14,6 +15,7 @@ type ProfileTabProps = {
 	onKeyDown: (e: React.KeyboardEvent) => void;
 	error?: string | null;
 	onClearError?: () => void;
+	savingUsername?: boolean;
 };
 
 export function ProfileTab({
@@ -27,6 +29,7 @@ export function ProfileTab({
 	onKeyDown,
 	error,
 	onClearError,
+	savingUsername = false,
 }: ProfileTabProps) {
 	return (
 		<div className="space-y-6">
@@ -68,6 +71,7 @@ export function ProfileTab({
 									onKeyDown={onKeyDown}
 									placeholder="Enter new username"
 									autoFocus
+									disabled={savingUsername}
 									className={`bg-white dark:bg-gray-700 ${
 										error
 											? "border-red-500 focus:border-red-500"
@@ -75,22 +79,29 @@ export function ProfileTab({
 									}`}
 								/>
 								{error && (
-									<div className="text-red-600 text-sm">
+									<div
+										className="text-red-600 text-sm"
+										role="alert"
+										aria-live="polite"
+									>
 										{error}
 									</div>
 								)}
 								<div className="flex gap-2">
-									<Button
-										onClick={onUsernameSave}
+									<AsyncButton
+										onClick={async () => onUsernameSave()}
 										size="sm"
+										loading={savingUsername}
+										loadingText="Saving..."
 										className="bg-blue-600 hover:bg-blue-700 text-white"
 									>
 										Save
-									</Button>
+									</AsyncButton>
 									<Button
 										onClick={onUsernameCancel}
 										size="sm"
 										variant="outline"
+										disabled={savingUsername}
 										className="border-gray-300 dark:border-gray-600"
 									>
 										Cancel

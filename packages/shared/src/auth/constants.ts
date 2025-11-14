@@ -1,0 +1,29 @@
+// Authentication-related constants shared across frontend and backend
+
+export const OTP_CONFIG = {
+	LENGTH: 6,
+	EXPIRY_MINUTES: 5,
+	RESEND_COOLDOWN_SECONDS: 60,
+	MAX_VERIFY_ATTEMPTS: 5,
+} as const;
+
+export const USER_AUTH_CONFIG = {
+	MAX_LOGIN_ATTEMPTS: 5,
+	RATE_LIMIT_SECONDS: 60,
+	LOCKOUT_DURATION_MINUTES: 15,
+} as const;
+
+export const SESSION_CONFIG = {
+	ACCESS_TOKEN_EXPIRY_MINUTES: 15,
+	REFRESH_TOKEN_EXPIRY_DAYS: 7,
+	TOKEN_REFRESH_THRESHOLD_MINUTES: 5,
+	MAX_CONCURRENT_SESSIONS: 10,
+
+	ADMIN_PRIVILEGE_EXPIRY_MINUTES: 30,
+} as const;
+
+export const API_CONFIG = {
+	TIMEOUT_MS: 30000, // 30 seconds
+	MAX_RETRY_ATTEMPTS: 3,
+	RETRY_DELAY_MS: 1000,
+} as const;

@@ -1,0 +1,60 @@
+// Shared error and success codes for consistent API responses across apps
+
+export const ERROR_CODES = {
+	// Generic
+	VALIDATION_ERROR: "VALIDATION_ERROR",
+	AUTH_ERROR: "AUTH_ERROR",
+	BAD_REQUEST: "BAD_REQUEST",
+	NOT_FOUND: "NOT_FOUND",
+	INTERNAL_ERROR: "INTERNAL_ERROR",
+
+	// Auth tokens/session
+	MISSING_TOKEN: "MISSING_TOKEN",
+	INVALID_TOKEN: "INVALID_TOKEN",
+	INVALID_TOKEN_FORMAT: "INVALID_TOKEN_FORMAT",
+	TOKEN_EXPIRED: "TOKEN_EXPIRED",
+	MISSING_REFRESH_TOKEN: "MISSING_REFRESH_TOKEN",
+	INVALID_REFRESH_TOKEN: "INVALID_REFRESH_TOKEN",
+	NO_ACTIVE_SESSION: "NO_ACTIVE_SESSION",
+	NOT_AUTHENTICATED: "NOT_AUTHENTICATED",
+	AUTH_FAILED: "AUTH_FAILED",
+
+	// Credentials / identity
+	INVALID_CREDENTIALS: "INVALID_CREDENTIALS",
+	USERNAME_EXISTS: "USERNAME_EXISTS",
+	UPDATE_FAILED: "UPDATE_FAILED",
+
+	// OTP/Rate limit
+	RATE_LIMITED: "RATE_LIMITED",
+	RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+	OTP_EXPIRED: "OTP_EXPIRED",
+	OTP_INVALID: "OTP_INVALID",
+	OTP_ATTEMPTS_EXCEEDED: "OTP_ATTEMPTS_EXCEEDED",
+	MISSING_USER_AGENT: "MISSING_USER_AGENT",
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+export const SUCCESS_CODES = {
+	// Auth
+	LOGIN_SUCCESS: "LOGIN_SUCCESS",
+	LOGOUT_SUCCESS: "LOGOUT_SUCCESS",
+	LOGOUT_ALL_SUCCESS: "LOGOUT_ALL_SUCCESS",
+
+	// OTP
+	OTP_SENT: "OTP_SENT",
+	OTP_VERIFIED: "OTP_VERIFIED",
+} as const;
+
+export type SuccessCode = (typeof SUCCESS_CODES)[keyof typeof SUCCESS_CODES];
+
+export interface ApiErrorResponse {
+	error: string;
+	code?: ErrorCode | string;
+	details?: unknown;
+}
+
+export const isApiError = (value: unknown): value is ApiErrorResponse =>
+	!!value &&
+	typeof value === "object" &&
+	typeof (value as any).error === "string";

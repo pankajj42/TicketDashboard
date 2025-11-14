@@ -1,82 +1,62 @@
-import React, { useState } from "react";
+import React from "react";
 import { Button } from "@/components/ui/button";
 import { Monitor, LogOut } from "lucide-react";
+import { AsyncButton } from "@/components/common/async-button";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 type SecurityTabProps = {
 	getUserDevices: () => Promise<any[]>;
 	logoutFromDevice: (sessionId: string) => Promise<boolean>;
 	logoutFromAllDevices: () => Promise<number>;
+	onBusyChange?: (busy: boolean) => void;
 };
 
 export function SecurityTab({
 	getUserDevices,
 	logoutFromDevice,
 	logoutFromAllDevices,
+	onBusyChange,
 }: SecurityTabProps) {
-	const [devices, setDevices] = useState<any[]>([]);
-	const [loadingDevicesList, setLoadingDevicesList] = useState(false);
-	const [signingOutAll, setSigningOutAll] = useState(false);
-	const [refreshing, setRefreshing] = useState(false);
-	const [loadingIndividualDevices, setLoadingIndividualDevices] = useState<
-		Set<string>
-	>(new Set());
+	const queryClient = useQueryClient();
+	const [activeDeviceId, setActiveDeviceId] = React.useState<string | null>(
+		null
+	);
 
-	const loadDevices = async () => {
-		setLoadingDevicesList(true);
-		try {
-			const deviceList = await getUserDevices();
-			setDevices(deviceList);
-		} catch (error) {
-			console.error("Failed to load devices:", error);
-		} finally {
-			setLoadingDevicesList(false);
-		}
-	};
+	const devicesQuery = useQuery({
+		queryKey: ["devices"],
+		queryFn: getUserDevices,
+		initialData: [],
+	});
 
-	const handleLogoutDevice = async (sessionId: string) => {
-		setLoadingIndividualDevices((prev) => new Set(prev).add(sessionId));
-		try {
-			await logoutFromDevice(sessionId);
-			await loadDevices(); // Refresh the list
-		} catch (error) {
-			console.error("Failed to logout device:", error);
-		} finally {
-			setLoadingIndividualDevices((prev) => {
-				const newSet = new Set(prev);
-				newSet.delete(sessionId);
-				return newSet;
-			});
-		}
-	};
+	// Derived busy flags for disabling interactions across the dialog
+	const isRefreshing = devicesQuery.isFetching || devicesQuery.isLoading;
 
-	const handleLogoutAllDevices = async () => {
-		setSigningOutAll(true);
-		try {
-			await logoutFromAllDevices();
-			await loadDevices(); // Refresh the list
-		} catch (error) {
-			console.error("Failed to logout from all devices:", error);
-		} finally {
-			setSigningOutAll(false);
-		}
-	};
+	const signOutDevice = useMutation({
+		mutationFn: async (sessionId: string) => logoutFromDevice(sessionId),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["devices"] });
+		},
+		onSettled: () => setActiveDeviceId(null),
+	});
 
-	const handleRefreshDevices = async () => {
-		setRefreshing(true);
-		try {
-			const deviceList = await getUserDevices();
-			setDevices(deviceList);
-		} catch (error) {
-			console.error("Failed to refresh devices:", error);
-		} finally {
-			setRefreshing(false);
-		}
-	};
+	const signOutAll = useMutation({
+		mutationFn: async () => logoutFromAllDevices(),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["devices"] });
+		},
+	});
 
-	// Load devices when component mounts
+	// Notify parent when this tab is busy (any action in progress)
 	React.useEffect(() => {
-		loadDevices();
-	}, []);
+		const busy =
+			isRefreshing || signOutAll.isPending || signOutDevice.isPending;
+		onBusyChange?.(busy);
+	}, [
+		isRefreshing,
+		signOutAll.isPending,
+		signOutDevice.isPending,
+		onBusyChange,
+	]);
 
 	return (
 		<div className="space-y-6">
@@ -94,20 +74,18 @@ export function SecurityTab({
 						This will sign you out from all devices and sessions.
 						You'll need to log in again.
 					</p>
-					<Button
-						onClick={handleLogoutAllDevices}
-						disabled={
-							signingOutAll || loadingDevicesList || refreshing
-						}
+					<AsyncButton
+						onClick={async () => signOutAll.mutateAsync()}
+						loading={signOutAll.isPending}
+						disabled={isRefreshing || signOutDevice.isPending}
 						variant="destructive"
 						size="sm"
 						className="bg-red-600 hover:bg-red-700"
+						loadingText="Signing Out..."
+						icon={<LogOut className="h-4 w-4" />}
 					>
-						<LogOut className="h-4 w-4 mr-2" />
-						{signingOutAll
-							? "Signing Out..."
-							: "Sign Out All Devices"}
-					</Button>
+						Sign Out All Devices
+					</AsyncButton>
 				</div>
 
 				{/* Active Devices */}
@@ -117,30 +95,35 @@ export function SecurityTab({
 							Active Sessions
 						</h4>
 						<Button
-							onClick={handleRefreshDevices}
-							disabled={refreshing || loadingDevicesList}
+							onClick={() => devicesQuery.refetch()}
+							disabled={
+								isRefreshing ||
+								signOutAll.isPending ||
+								signOutDevice.isPending
+							}
 							variant="outline"
 							size="sm"
 							className="border-gray-300 dark:border-gray-600"
 						>
-							{refreshing || loadingDevicesList
+							{devicesQuery.isFetching
 								? "Refreshing..."
 								: "Refresh"}
 						</Button>
 					</div>
 
 					<div className="flex-1 min-h-0 overflow-y-auto">
-						{loadingDevicesList && devices.length === 0 ? (
+						{devicesQuery.isLoading &&
+						(devicesQuery.data?.length ?? 0) === 0 ? (
 							<div className="text-center py-8 text-gray-500 dark:text-gray-400">
 								Loading devices...
 							</div>
-						) : devices.length === 0 ? (
+						) : (devicesQuery.data?.length ?? 0) === 0 ? (
 							<div className="text-center py-8 text-gray-500 dark:text-gray-400">
 								No active sessions found
 							</div>
 						) : (
 							<div className="space-y-3">
-								{devices.map((device) => (
+								{devicesQuery.data!.map((device: any) => (
 									<div
 										key={device.id}
 										className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg"
@@ -167,28 +150,29 @@ export function SecurityTab({
 												</p>
 											</div>
 										</div>
-										<Button
-											onClick={() =>
-												handleLogoutDevice(device.id)
+										<AsyncButton
+											onClick={async () => {
+												setActiveDeviceId(device.id);
+												await signOutDevice.mutateAsync(
+													device.id
+												);
+											}}
+											loading={
+												signOutDevice.isPending &&
+												activeDeviceId === device.id
 											}
 											disabled={
-												refreshing ||
-												loadingDevicesList ||
-												signingOutAll ||
-												loadingIndividualDevices.has(
-													device.id
-												)
+												isRefreshing ||
+												signOutAll.isPending ||
+												signOutDevice.isPending
 											}
 											variant="outline"
 											size="sm"
 											className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+											loadingText="Signing Out..."
 										>
-											{loadingIndividualDevices.has(
-												device.id
-											)
-												? "Signing Out..."
-												: "Sign Out"}
-										</Button>
+											Sign Out
+										</AsyncButton>
 									</div>
 								))}
 							</div>

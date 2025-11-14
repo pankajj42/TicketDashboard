@@ -11,6 +11,9 @@ export interface AuthResult {
 	refreshToken?: string;
 	isNewUser?: boolean;
 	message?: string;
+	// When OTP verification fails, include error code and remaining attempts
+	code?: string;
+	attemptsRemaining?: number;
 }
 
 // Enhanced LoginResult to include OTP timing information
@@ -49,6 +52,8 @@ export class UserAuthService {
 			return {
 				success: false,
 				message: otpResult.message || "Invalid OTP",
+				code: otpResult.code,
+				attemptsRemaining: otpResult.attemptsRemaining,
 			};
 		}
 

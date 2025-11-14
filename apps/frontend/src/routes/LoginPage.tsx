@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { Button } from "../components/ui/button";
+import { AsyncButton } from "@/components/common/async-button";
 import {
 	Card,
 	CardContent,
@@ -73,13 +74,15 @@ export default function LoginPage() {
 								disabled={isLoading}
 								error={error || undefined}
 							/>
-							<Button
+							<AsyncButton
 								onClick={handleSendOtp}
-								disabled={isLoading || !email.trim()}
+								disabled={!email.trim()}
 								className="w-full"
+								loading={isLoading}
+								loadingText="Sending..."
 							>
-								{isLoading ? "Sending..." : "Send OTP"}
-							</Button>
+								Send OTP
+							</AsyncButton>
 						</div>
 					) : (
 						<div className="space-y-6">
@@ -115,7 +118,11 @@ export default function LoginPage() {
 								</div>
 
 								{error && (
-									<div className="text-center">
+									<div
+										className="text-center"
+										role="status"
+										aria-live="polite"
+									>
 										<p className="text-sm text-destructive">
 											{error}
 										</p>
@@ -135,16 +142,17 @@ export default function LoginPage() {
 								>
 									Back
 								</Button>
-								<Button
+								<AsyncButton
 									onClick={handleVerifyOtp}
 									disabled={
-										isLoading ||
 										otp.length !== AUTH_CONFIG.OTP_LENGTH
 									}
 									className="flex-1"
+									loading={isLoading}
+									loadingText="Verifying..."
 								>
-									{isLoading ? "Verifying..." : "Verify"}
-								</Button>
+									Verify
+								</AsyncButton>
 							</div>
 						</div>
 					)}

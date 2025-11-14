@@ -6,12 +6,15 @@ export class ResponseHelper {
 	 * Set secure refresh token cookie
 	 */
 	static setRefreshTokenCookie(res: Response, refreshToken: string): void {
+		const sameSite = config.COOKIE_SAME_SITE || "strict";
+		const secure = sameSite === "none" ? true : !config.isDevelopment;
 		res.cookie("refreshToken", refreshToken, {
 			httpOnly: true,
-			secure: !config.isDevelopment,
-			sameSite: "strict",
+			secure,
+			sameSite,
 			maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 			path: "/",
+			...(config.COOKIE_DOMAIN ? { domain: config.COOKIE_DOMAIN } : {}),
 		});
 	}
 
@@ -19,11 +22,14 @@ export class ResponseHelper {
 	 * Clear refresh token cookie
 	 */
 	static clearRefreshTokenCookie(res: Response): void {
+		const sameSite = config.COOKIE_SAME_SITE || "strict";
+		const secure = sameSite === "none" ? true : !config.isDevelopment;
 		res.clearCookie("refreshToken", {
 			httpOnly: true,
-			secure: !config.isDevelopment,
-			sameSite: "strict",
+			secure,
+			sameSite,
 			path: "/",
+			...(config.COOKIE_DOMAIN ? { domain: config.COOKIE_DOMAIN } : {}),
 		});
 	}
 

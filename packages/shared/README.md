@@ -1,14 +1,23 @@
 # @repo/shared
 
-Internal shared package for the Ticket Dashboard project.
+Shared types, schemas, and small utilities used across the Ticket Dashboard monorepo.
 
-## Overview
+## What’s included
 
-This package contains shared types, utilities, and functions that can be used across all apps in the monorepo.
+- Auth modules (barrel exported from `src/index.ts`):
+    - `auth/constants` — OTP, session, and API config (used by both apps)
+    - `auth/schemas` — Zod schemas for login, OTP verification, logout, etc.
+    - `auth/types` — Public API types and JWT payload types used by apps
+    - `auth/timing` — Response timing types and helpers (e.g., `createOtpTiming`)
+    - `errors` — Shared error/success codes and ApiErrorResponse shape
+- Utilities:
+    - `generateId()` — simple unique ID helper
+    - `formatDate(date)` — basic date formatting helper
+    - `title` — project title string
 
-## Usage
+## Install and import
 
-Install the package in any app within the monorepo:
+Add the dependency in any app within the monorepo (already wired via workspaces):
 
 ```json
 {
@@ -18,61 +27,63 @@ Install the package in any app within the monorepo:
 }
 ```
 
-Then import what you need:
+Import what you need from the package root (barrel exports):
 
-```typescript
-import { generateId, formatDate } from "@repo/shared";
+```ts
+import {
+	// constants
+	OTP_CONFIG,
+	USER_AUTH_CONFIG,
+	SESSION_CONFIG,
+	API_CONFIG,
+	// schemas
+	LoginSchema,
+	VerifyOtpSchema,
+	// types
+	type ApiUser,
+	type AccessTokenPayload,
+	// timing
+	createOtpTiming,
+	// errors
+	ERROR_CODES,
+} from "@repo/shared";
 
-// Generate a unique ID
-const id = generateId();
+import { generateId, formatDate, title } from "@repo/shared";
+```
 
-// Format a date
-const formatted = formatDate(new Date());
+## Examples
+
+Validate login input:
+
+```ts
+const parsed = LoginSchema.parse({ email: "user@example.com" });
+```
+
+Use shared constants in backend config:
+
+```ts
+import { OTP_CONFIG, SESSION_CONFIG } from "@repo/shared";
+
+const OTP_LENGTH = Number(OTP_CONFIG.LENGTH);
+const ACCESS_TOKEN_EXPIRY_MINUTES = Number(
+	SESSION_CONFIG.ACCESS_TOKEN_EXPIRY_MINUTES
+);
+```
+
+Compute OTP timing response:
+
+```ts
+const timing = createOtpTiming(new Date(Date.now() + 5 * 60_000), new Date());
 ```
 
 ## Development
 
-### Building the package
+- Build: `npm run build`
+- Watch: `npm run dev`
+- Type check: `npm run check-types`
+- Clean: `npm run clean`
 
-```bash
-npm run build
-```
+Notes:
 
-### Development mode (watch)
-
-```bash
-npm run dev
-```
-
-### Type checking
-
-```bash
-npm run check-types
-```
-
-### Clean build artifacts
-
-```bash
-npm run clean
-```
-
-## What's included
-
-- **Types**: Common interfaces like `User`, `Project`, `TicketCard`
-- **Utilities**: Helper functions like `generateId`, `formatDate`
-- **Constants**: Shared constants and configurations
-
-## Adding new exports
-
-1. Add your code to `src/index.ts`
-2. Export it from the main export
-3. Build the package: `npm run build`
-4. The changes will be available to all apps immediately in development mode
-
-## Just-in-Time compilation
-
-This package uses tsup for just-in-time compilation, meaning:
-
-- Changes are automatically rebuilt when files change
-- No need to manually rebuild during development
-- Hot reloading works across the monorepo
+- Only the modules re-exported from `src/index.ts` are part of the public API.
+- Avoid adding unused exports—keep this package minimal and focused on what the apps actually use.

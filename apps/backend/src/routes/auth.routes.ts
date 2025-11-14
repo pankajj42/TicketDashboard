@@ -2,20 +2,31 @@ import { Router } from "express";
 import { AuthController } from "../controllers/auth.controller.js";
 import {
 	authenticateToken,
-	createAuthRateLimit,
+	createRedisRateLimit,
 	validateDeviceInfo,
 } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
-// Rate limiting for auth endpoints
-const authLimit = createAuthRateLimit();
+// Rate limiting for auth endpoints (Redis-backed)
+const loginLimit = createRedisRateLimit("login");
+const verifyLimit = createRedisRateLimit(
+	"verify",
+	undefined,
+	undefined,
+	(req) => {
+		const ip =
+			(req.headers["x-forwarded-for"] as string) || req.ip || "unknown";
+		const email = (req.body as any)?.email || "";
+		return `${ip}:${email}`;
+	}
+);
 
 // Public routes (no authentication required)
-router.post("/login", authLimit, AuthController.login);
+router.post("/login", loginLimit, AuthController.login);
 router.post(
 	"/verify-otp",
-	authLimit,
+	verifyLimit,
 	validateDeviceInfo,
 	AuthController.verifyOtp
 );

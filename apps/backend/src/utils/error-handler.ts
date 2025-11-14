@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { z } from "zod";
-import type { ApiErrorResponse } from "@repo/shared";
+import { ERROR_CODES, type ApiErrorResponse } from "@repo/shared";
+import { logger } from "../lib/logger.js";
 
 export class ErrorHandler {
 	/**
@@ -15,7 +16,7 @@ export class ErrorHandler {
 			error.issues.map((issue) => issue?.message || "").join("; ");
 		res.status(400).json({
 			error: message,
-			code: "VALIDATION_ERROR",
+			code: ERROR_CODES.VALIDATION_ERROR,
 			details: error.issues,
 		});
 	}
@@ -26,7 +27,7 @@ export class ErrorHandler {
 	static handleAuthError(
 		res: Response<ApiErrorResponse>,
 		message: string,
-		code: string = "AUTH_ERROR"
+		code: string = ERROR_CODES.AUTH_ERROR
 	): void {
 		res.status(401).json({
 			error: message,
@@ -43,7 +44,7 @@ export class ErrorHandler {
 	): void {
 		res.status(404).json({
 			error: message,
-			code: "NOT_FOUND",
+			code: ERROR_CODES.NOT_FOUND,
 		});
 	}
 
@@ -53,11 +54,13 @@ export class ErrorHandler {
 	static handleBadRequestError(
 		res: Response<ApiErrorResponse>,
 		message: string,
-		code: string = "BAD_REQUEST"
+		code: string = ERROR_CODES.BAD_REQUEST,
+		details?: unknown
 	): void {
 		res.status(400).json({
 			error: message,
 			code,
+			...(details !== undefined ? { details } : {}),
 		});
 	}
 
@@ -70,7 +73,7 @@ export class ErrorHandler {
 	): void {
 		res.status(500).json({
 			error: message,
-			code: "INTERNAL_ERROR",
+			code: ERROR_CODES.INTERNAL_ERROR,
 		});
 	}
 
@@ -83,7 +86,7 @@ export class ErrorHandler {
 	): void {
 		res.status(429).json({
 			error: `Too many attempts. Try again in ${timeLeft} seconds.`,
-			code: "RATE_LIMIT_EXCEEDED",
+			code: ERROR_CODES.RATE_LIMIT_EXCEEDED,
 		});
 	}
 
@@ -106,7 +109,11 @@ export class ErrorHandler {
 				error.message.includes("TOKEN_EXPIRED") ||
 				error.message.includes("EXPIRED")
 			) {
-				this.handleAuthError(res, "Token expired", "TOKEN_EXPIRED");
+				this.handleAuthError(
+					res,
+					"Token expired",
+					ERROR_CODES.TOKEN_EXPIRED
+				);
 				return;
 			}
 
@@ -117,7 +124,7 @@ export class ErrorHandler {
 				this.handleAuthError(
 					res,
 					"Invalid credentials",
-					"INVALID_CREDENTIALS"
+					ERROR_CODES.INVALID_CREDENTIALS
 				);
 				return;
 			}
@@ -129,7 +136,7 @@ export class ErrorHandler {
 		}
 
 		// Log unexpected errors for debugging
-		console.error(`${operation} error:`, error);
+		logger.error(`${operation} error`, { error });
 		this.handleInternalError(res, `Failed to ${operation}`);
 	}
 }

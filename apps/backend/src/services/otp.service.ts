@@ -1,8 +1,14 @@
 import { redis } from "../lib/redis.js";
+import { logger } from "../lib/logger.js";
 import { queue } from "./queue.service.js";
 import config from "../config/env.js";
 import crypto from "crypto";
-import { createOtpTiming, type OtpResponse } from "@repo/shared";
+import {
+	createOtpTiming,
+	type OtpResponse,
+	ERROR_CODES,
+	SUCCESS_CODES,
+} from "@repo/shared";
 
 interface OtpData {
 	code: string;
@@ -47,7 +53,7 @@ export class OtpService {
 					return {
 						success: false,
 						message: `Please wait before requesting a new OTP`,
-						code: "RATE_LIMITED",
+						code: ERROR_CODES.RATE_LIMITED,
 						data: {
 							otpId: otpData.otpId,
 							...createOtpTiming(
@@ -98,7 +104,7 @@ export class OtpService {
 			return {
 				success: true,
 				message: "OTP sent successfully",
-				code: "OTP_SENT",
+				code: SUCCESS_CODES.OTP_SENT,
 				data: {
 					otpId,
 					...createOtpTiming(otpExpiryDate, resendAllowedDate),
@@ -110,7 +116,7 @@ export class OtpService {
 				},
 			};
 		} catch (error) {
-			console.error("Error generating OTP:", error);
+			logger.error("Error generating OTP", { error });
 			throw new Error("Failed to generate OTP");
 		}
 	}
@@ -132,7 +138,7 @@ export class OtpService {
 				return {
 					success: false,
 					message: "Invalid or expired OTP",
-					code: "OTP_EXPIRED",
+					code: ERROR_CODES.OTP_EXPIRED,
 				};
 			}
 
@@ -146,7 +152,7 @@ export class OtpService {
 					success: false,
 					message:
 						"Too many failed attempts. Please request a new OTP",
-					code: "OTP_ATTEMPTS_EXCEEDED",
+					code: ERROR_CODES.OTP_ATTEMPTS_EXCEEDED,
 					attemptsRemaining: 0,
 				};
 			}
@@ -176,7 +182,7 @@ export class OtpService {
 				return {
 					success: false,
 					message: `Invalid OTP. ${attemptsRemaining} attempts remaining`,
-					code: "OTP_INVALID",
+					code: ERROR_CODES.OTP_INVALID,
 					attemptsRemaining,
 				};
 			}
@@ -186,10 +192,10 @@ export class OtpService {
 
 			return {
 				success: true,
-				code: "OTP_VERIFIED",
+				code: SUCCESS_CODES.OTP_VERIFIED,
 			};
 		} catch (error) {
-			console.error("Error verifying OTP:", error);
+			logger.error("Error verifying OTP", { error });
 			throw new Error("Failed to verify OTP");
 		}
 	}

@@ -3,9 +3,11 @@ import { JwtService } from "../services/jwt.service.js";
 import { SessionService } from "../services/session.service.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import { ErrorHandler } from "../utils/error-handler.js";
+import { ERROR_CODES } from "@repo/shared";
 import { ResponseHelper } from "../utils/response-helper.js";
 import type { AccessTokenPayload, ApiErrorResponse } from "@repo/shared";
 import config from "../config/env.js";
+import { redis } from "../lib/redis.js";
 
 // Enhanced user data for request object
 interface RequestUser extends AccessTokenPayload {
@@ -38,7 +40,7 @@ export const authenticateToken = async (
 			ErrorHandler.handleAuthError(
 				res,
 				"Access token required",
-				"MISSING_TOKEN"
+				ERROR_CODES.MISSING_TOKEN
 			);
 			return;
 		}
@@ -49,7 +51,7 @@ export const authenticateToken = async (
 			ErrorHandler.handleAuthError(
 				res,
 				"Invalid or expired access token",
-				"INVALID_TOKEN"
+				ERROR_CODES.INVALID_TOKEN
 			);
 			return;
 		}
@@ -104,6 +106,50 @@ export const createAuthRateLimit = (
 };
 
 /**
+ * Redis-backed rate limiting middleware (fixed window)
+ * Uses Redis INCR + PEXPIRE to track attempts per key within a window.
+ * The key is based on client IP by default, and can be customized via keySelector.
+ */
+export const createRedisRateLimit = (
+	prefix: string = "auth",
+	maxAttempts: number = config.USER_AUTH_ATTEMPTS_LIMIT,
+	windowMs: number = config.USER_AUTH_RATE_LIMIT_SECONDS * 1000,
+	keySelector?: (req: Request) => string
+) => {
+	return async (
+		req: Request,
+		res: Response<ApiErrorResponse>,
+		next: NextFunction
+	): Promise<void> => {
+		try {
+			const idPart = keySelector
+				? keySelector(req)
+				: ResponseHelper.extractIpAddress(req);
+			const key = `rl:${prefix}:${idPart}`;
+
+			// Increment the counter and set expiry on first hit
+			const count = await redis.incr(key);
+			if (count === 1) {
+				await redis.pexpire(key, windowMs);
+			}
+
+			if (count > maxAttempts) {
+				const ttlMs = await redis.pttl(key);
+				const timeLeft = ttlMs > 0 ? Math.ceil(ttlMs / 1000) : 0;
+				ErrorHandler.handleRateLimitError(res, timeLeft);
+				return;
+			}
+
+			next();
+		} catch (error) {
+			// In case Redis is unavailable, fail-open to avoid blocking auth
+			console.error("Rate limit middleware error:", error);
+			next();
+		}
+	};
+};
+
+/**
  * Middleware to validate device information
  */
 export const validateDeviceInfo = (
@@ -117,7 +163,7 @@ export const validateDeviceInfo = (
 		ErrorHandler.handleBadRequestError(
 			res,
 			"User-Agent header required",
-			"MISSING_USER_AGENT"
+			ERROR_CODES.MISSING_USER_AGENT
 		);
 		return;
 	}
@@ -180,21 +226,21 @@ function handleAuthMiddlewareError(
 				ErrorHandler.handleAuthError(
 					res,
 					"Access token expired",
-					"TOKEN_EXPIRED"
+					ERROR_CODES.TOKEN_EXPIRED
 				);
 				return;
 			case "INVALID_ACCESS_TOKEN":
 				ErrorHandler.handleAuthError(
 					res,
 					"Invalid access token format",
-					"INVALID_TOKEN_FORMAT"
+					ERROR_CODES.INVALID_TOKEN_FORMAT
 				);
 				return;
 			default:
 				ErrorHandler.handleAuthError(
 					res,
 					"Authentication failed",
-					"AUTH_FAILED"
+					ERROR_CODES.AUTH_FAILED
 				);
 				return;
 		}

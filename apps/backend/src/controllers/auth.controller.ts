@@ -3,6 +3,7 @@ import { UserAuthService } from "../services/user.auth.service.js";
 import { ErrorHandler } from "../utils/error-handler.js";
 import { ResponseHelper } from "../utils/response-helper.js";
 import config from "../config/env.js";
+import { ERROR_CODES, SUCCESS_CODES } from "@repo/shared";
 import type {
 	LoginRequest,
 	LoginResponse,
@@ -14,12 +15,14 @@ import type {
 	GetDevicesResponse,
 	LogoutDeviceResponse,
 	ApiErrorResponse,
+	UpdateProfileRequest,
 } from "@repo/shared";
 import {
 	LoginSchema,
 	VerifyOtpSchema,
 	LogoutSchema,
 	LogoutDeviceSchema,
+	UpdateProfileSchema,
 } from "@repo/shared";
 
 export class AuthController {
@@ -39,7 +42,7 @@ export class AuthController {
 				ErrorHandler.handleBadRequestError(
 					res,
 					result.message,
-					result.code || "OTP_GENERATION_FAILED"
+					result.code || ERROR_CODES.BAD_REQUEST
 				);
 				return;
 			}
@@ -92,7 +95,10 @@ export class AuthController {
 				ErrorHandler.handleBadRequestError(
 					res,
 					result.message || "Invalid OTP",
-					"INVALID_OTP"
+					result.code || ERROR_CODES.OTP_INVALID,
+					result.attemptsRemaining !== undefined
+						? { attemptsRemaining: result.attemptsRemaining }
+						: undefined
 				);
 				return;
 			}
@@ -104,7 +110,7 @@ export class AuthController {
 
 			ResponseHelper.sendSuccess(res, {
 				success: true,
-				code: "LOGIN_SUCCESS",
+				code: SUCCESS_CODES.LOGIN_SUCCESS,
 				data: {
 					user: result.user,
 					accessToken: result.accessToken,
@@ -155,7 +161,7 @@ export class AuthController {
 				ErrorHandler.handleAuthError(
 					res,
 					"Refresh token required",
-					"MISSING_REFRESH_TOKEN"
+					ERROR_CODES.MISSING_REFRESH_TOKEN
 				);
 				return;
 			}
@@ -167,7 +173,7 @@ export class AuthController {
 				ErrorHandler.handleAuthError(
 					res,
 					"Invalid or expired refresh token",
-					"INVALID_REFRESH_TOKEN"
+					ERROR_CODES.INVALID_REFRESH_TOKEN
 				);
 				return;
 			}
@@ -195,7 +201,7 @@ export class AuthController {
 				ErrorHandler.handleAuthError(
 					res,
 					"No active session found",
-					"NO_ACTIVE_SESSION"
+					ERROR_CODES.NO_ACTIVE_SESSION
 				);
 				return;
 			}
@@ -218,6 +224,9 @@ export class AuthController {
 				message: logoutAll
 					? `Logged out from ${loggedOutDevices} device(s)`
 					: "Logged out successfully",
+				code: logoutAll
+					? SUCCESS_CODES.LOGOUT_ALL_SUCCESS
+					: SUCCESS_CODES.LOGOUT_SUCCESS,
 				loggedOutDevices,
 			});
 		} catch (error) {
@@ -237,7 +246,7 @@ export class AuthController {
 				ErrorHandler.handleAuthError(
 					res,
 					"Authentication required",
-					"NOT_AUTHENTICATED"
+					ERROR_CODES.NOT_AUTHENTICATED
 				);
 				return;
 			}
@@ -264,7 +273,7 @@ export class AuthController {
 				ErrorHandler.handleAuthError(
 					res,
 					"Authentication required",
-					"NOT_AUTHENTICATED"
+					ERROR_CODES.NOT_AUTHENTICATED
 				);
 				return;
 			}
@@ -293,6 +302,7 @@ export class AuthController {
 
 			ResponseHelper.sendSuccess(res, {
 				message: "Device logged out successfully",
+				code: SUCCESS_CODES.LOGOUT_SUCCESS,
 				success: true,
 			});
 		} catch (error) {
@@ -309,7 +319,7 @@ export class AuthController {
 				ErrorHandler.handleAuthError(
 					res,
 					"Authentication required",
-					"NOT_AUTHENTICATED"
+					ERROR_CODES.NOT_AUTHENTICATED
 				);
 				return;
 			}
@@ -333,7 +343,16 @@ export class AuthController {
 	/**
 	 * PUT /api/auth/profile - Update user profile
 	 */
-	static async updateProfile(req: Request, res: Response): Promise<void> {
+	static async updateProfile(
+		req: Request<{}, {}, UpdateProfileRequest>,
+		res: Response<
+			| {
+					success: boolean;
+					user: { id: string; email: string; username: string };
+			  }
+			| ApiErrorResponse
+		>
+	): Promise<void> {
 		try {
 			if (!req.user) {
 				ErrorHandler.handleAuthError(
@@ -344,43 +363,8 @@ export class AuthController {
 				return;
 			}
 
-			const { username } = req.body;
-
-			// Basic validation
-			if (
-				!username ||
-				typeof username !== "string" ||
-				username.trim().length === 0
-			) {
-				ErrorHandler.handleBadRequestError(
-					res,
-					"Username is required and must be a non-empty string",
-					"INVALID_INPUT"
-				);
-				return;
-			}
-
-			// Validate username format (basic rules)
+			const { username } = UpdateProfileSchema.parse(req.body);
 			const trimmedUsername = username.trim();
-			if (trimmedUsername.length < 2 || trimmedUsername.length > 50) {
-				ErrorHandler.handleBadRequestError(
-					res,
-					"Username must be between 2 and 50 characters",
-					"INVALID_USERNAME_LENGTH"
-				);
-				return;
-			}
-
-			// Check for valid characters (letters, numbers, underscores, hyphens)
-			const usernameRegex = /^[a-zA-Z0-9_-]+$/;
-			if (!usernameRegex.test(trimmedUsername)) {
-				ErrorHandler.handleBadRequestError(
-					res,
-					"Username can only contain letters, numbers, underscores, and hyphens",
-					"INVALID_USERNAME_FORMAT"
-				);
-				return;
-			}
 
 			try {
 				const success = await UserAuthService.updateUserProfile(
@@ -392,16 +376,16 @@ export class AuthController {
 					ErrorHandler.handleBadRequestError(
 						res,
 						"Failed to update profile",
-						"UPDATE_FAILED"
+						ERROR_CODES.UPDATE_FAILED
 					);
 					return;
 				}
 			} catch (serviceError: any) {
-				if (serviceError.code === "USERNAME_EXISTS") {
+				if (serviceError.code === ERROR_CODES.USERNAME_EXISTS) {
 					ErrorHandler.handleBadRequestError(
 						res,
 						"This username is already taken. Please choose a different one.",
-						"USERNAME_EXISTS"
+						ERROR_CODES.USERNAME_EXISTS
 					);
 					return;
 				}
