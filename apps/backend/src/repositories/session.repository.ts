@@ -67,6 +67,19 @@ export class SessionRepository extends BaseRepository {
 		return result.count;
 	}
 
+	static async deleteAllForUserExceptSession(
+		userId: string,
+		keepSessionId: string
+	): Promise<number> {
+		const result = await super.prisma.refreshToken.deleteMany({
+			where: {
+				userId,
+				sessionId: { not: keepSessionId },
+			},
+		});
+		return result.count;
+	}
+
 	static async cleanupExpiredSessions(): Promise<number> {
 		const result = await super.prisma.refreshToken.deleteMany({
 			where: {

@@ -39,6 +39,10 @@ model User {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
+  // Admin elevation state (current)
+  adminElevatedSessionId String?
+  adminElevatedUntil     DateTime?
+
   // Relations
   createdTickets     Ticket[]       @relation("TicketCreator")
   assignedTickets    Ticket[]       @relation("TicketAssignee")
@@ -48,10 +52,12 @@ model User {
   
   // Auth Relations
   refreshTokens      RefreshToken[] @relation("UserRefreshTokens")
+  adminElevations    AdminElevation[]
 
   @@map("users")
   @@index([username])
   @@index([email])
+  @@index([adminElevatedUntil])
 }
 
 model Project {
@@ -166,4 +172,23 @@ model RefreshToken {
   @@index([expiresAt])
   @@index([sessionId])
   @@index([token])
+}
+
+model AdminElevation {
+  id         String   @id @default(uuid())
+  userId     String
+  sessionId  String
+  jti        String   @unique
+  issuedAt   DateTime @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  ipAddress  String?
+  userAgent  String?
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admin_elevations")
+  @@index([userId])
+  @@index([sessionId])
+  @@index([expiresAt])
 }

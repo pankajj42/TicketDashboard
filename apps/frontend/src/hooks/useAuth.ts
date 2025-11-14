@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -15,11 +15,16 @@ import {
 	useSetError,
 	useClearAuth,
 	useResetAuth,
+	useSetAdminElevation,
+	useClearAdminElevation,
+	useSetAdminExpiry,
 } from "@/store/auth.store";
 import { AuthApiService, ApiError } from "@/services/auth.api";
+import { hashSha256Hex } from "@/lib/utils";
 import { ERROR_MESSAGES, SUCCESS_MESSAGES, ROUTES } from "@/lib/constants";
 import { getFriendlyErrorMessage } from "@/lib/error-codes";
 import type { ApiUser } from "@repo/shared";
+import { broadcast, subscribe } from "@/lib/broadcast";
 
 export const useAuth = () => {
 	const navigate = useNavigate();
@@ -31,6 +36,9 @@ export const useAuth = () => {
 	const error = useAuthError();
 	const setAuth = useSetAuth();
 	const setAccessToken = useSetAccessToken();
+	const setAdminElevation = useSetAdminElevation();
+	const clearAdminElevation = useClearAdminElevation();
+	const setAdminExpiry = useSetAdminExpiry();
 	const setLoading = useSetLoading();
 	const setRefreshing = useSetRefreshing();
 	const setError = useSetError();
@@ -132,6 +140,16 @@ export const useAuth = () => {
 					);
 					// Set full authentication state
 					setAuth(userResponse.user, response.accessToken);
+					if (
+						(userResponse as any).session?.isAdmin &&
+						(userResponse as any).session?.adminExpiresAt
+					) {
+						setAdminExpiry(
+							(userResponse as any).session.adminExpiresAt
+						);
+					} else {
+						clearAdminElevation();
+					}
 					return true;
 				} catch (userError) {
 					console.error(
@@ -175,6 +193,7 @@ export const useAuth = () => {
 				}
 
 				clearAuth();
+				clearAdminElevation();
 				navigate(ROUTES.LOGIN, { replace: true });
 
 				toast.success(
@@ -186,6 +205,7 @@ export const useAuth = () => {
 				console.error("[auth] logout failed", error);
 				// Even if logout fails on server, clear local auth state
 				clearAuth();
+				clearAdminElevation();
 				navigate(ROUTES.LOGIN, { replace: true });
 
 				// Don't show error for logout issues - user is trying to leave anyway
@@ -196,6 +216,67 @@ export const useAuth = () => {
 	);
 
 	/**
+	 * Elevate to admin (15 minutes)
+	 */
+	const elevateAdmin = useCallback(
+		async (
+			password: string
+		): Promise<{ success: boolean; expiresAt?: string }> => {
+			if (!accessToken) return { success: false };
+			try {
+				// Hash the password client-side (SHA-256 hex)
+				const passwordHash = await hashSha256Hex(password);
+				const response = await AuthApiService.elevateAdmin(
+					accessToken,
+					{ password: passwordHash }
+				);
+				setAdminElevation(response.adminToken, response.expiresAt);
+				// Broadcast elevation to other tabs
+				broadcast({
+					type: "admin:elevated",
+					adminExpiresAt: response.expiresAt,
+				});
+				toast.success("Admin access granted for 15 minutes");
+				return { success: true, expiresAt: response.expiresAt };
+			} catch (error) {
+				const apiErr = error as ApiError | undefined;
+				const msg = getFriendlyErrorMessage(
+					apiErr?.code,
+					apiErr?.message,
+					apiErr?.details
+				);
+				toast.error(msg);
+				return { success: false };
+			}
+		},
+		[accessToken, setAdminElevation]
+	);
+
+	/**
+	 * Revoke admin elevation immediately
+	 */
+	const revokeAdmin = useCallback(async (): Promise<boolean> => {
+		if (!accessToken) return false;
+		try {
+			await AuthApiService.revokeAdmin(accessToken);
+			clearAdminElevation();
+			// Broadcast revoke to other tabs
+			broadcast({ type: "admin:revoked" });
+			toast.success("Admin access revoked");
+			return true;
+		} catch (error) {
+			const apiErr = error as ApiError | undefined;
+			const msg = getFriendlyErrorMessage(
+				apiErr?.code,
+				apiErr?.message,
+				apiErr?.details
+			);
+			toast.error(msg);
+			return false;
+		}
+	}, [accessToken, clearAdminElevation]);
+
+	/**
 	 * Get current user info (mainly for validation)
 	 */
 	const getCurrentUser = useCallback(async (): Promise<ApiUser | null> => {
@@ -203,6 +284,14 @@ export const useAuth = () => {
 
 		try {
 			const response = await AuthApiService.getCurrentUser(accessToken);
+			if (
+				(response as any).session?.isAdmin &&
+				(response as any).session?.adminExpiresAt
+			) {
+				setAdminExpiry((response as any).session.adminExpiresAt);
+			} else {
+				clearAdminElevation();
+			}
 			return response.user;
 		} catch (error) {
 			console.error("[auth] getCurrentUser failed", error);
@@ -259,10 +348,19 @@ export const useAuth = () => {
 				if (response.success) {
 					// Update the user in the store
 					if (user) {
-						setAuth(
-							{ ...user, username: updates.username },
-							accessToken
-						);
+						const updatedUser = {
+							...user,
+							username: updates.username,
+						};
+						setAuth(updatedUser, accessToken);
+						// Broadcast profile update
+						broadcast({
+							type: "user:profileUpdated",
+							user: {
+								username: updatedUser.username,
+								email: updatedUser.email,
+							},
+						});
 					}
 					toast.success("Profile updated successfully");
 					return true;
@@ -387,7 +485,39 @@ export const useAuth = () => {
 		getUserDevices,
 		logoutFromDevice,
 		logoutFromAllDevices,
+		elevateAdmin,
+		revokeAdmin,
 		clearError: () => setError(null),
 		reset,
 	};
+};
+
+// Subscription side-effect placed outside hook body would not have access to state; rely on consumer calling useAuth.
+// Instead we export an internal effect hook to be used at app root.
+export const useAuthBroadcastSync = () => {
+	const setAuth = useSetAuth();
+	const clearAdminElevation = useClearAdminElevation();
+	const setAdminExpiry = useSetAdminExpiry();
+	const accessToken = useAccessToken();
+	const user = useUser();
+
+	useEffect(() => {
+		const unsubscribe = subscribe((ev) => {
+			if (ev.type === "admin:elevated") {
+				setAdminExpiry(ev.adminExpiresAt);
+			}
+			if (ev.type === "admin:revoked") {
+				clearAdminElevation();
+			}
+			if (ev.type === "user:profileUpdated") {
+				if (user && accessToken) {
+					setAuth(
+						{ ...user, username: ev.user.username },
+						accessToken
+					);
+				}
+			}
+		});
+		return () => unsubscribe();
+	}, [setAdminExpiry, clearAdminElevation, setAuth, user, accessToken]);
 };

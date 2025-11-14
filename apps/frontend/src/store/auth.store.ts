@@ -7,6 +7,11 @@ export interface AuthState {
 	user: ApiUser | null;
 	accessToken: string | null;
 
+	// Admin elevation state
+	isAdminElevated?: boolean;
+	adminToken?: string | null;
+	adminExpiresAt?: string | null; // ISO string
+
 	// Loading states
 	isLoading: boolean;
 	isRefreshing: boolean;
@@ -17,6 +22,9 @@ export interface AuthState {
 	// Actions
 	setAuth: (user: ApiUser, accessToken: string) => void;
 	setAccessToken: (token: string) => void;
+	setAdminElevation: (token: string, expiresAt: string) => void;
+	clearAdminElevation: () => void;
+	setAdminExpiry: (expiresAt: string) => void;
 	setLoading: (loading: boolean) => void;
 	setRefreshing: (refreshing: boolean) => void;
 	setError: (error: string | null) => void;
@@ -28,6 +36,9 @@ const initialState = {
 	isAuthenticated: false,
 	user: null,
 	accessToken: null,
+	isAdminElevated: false,
+	adminToken: null,
+	adminExpiresAt: null,
 	isLoading: false,
 	isRefreshing: false,
 	error: null,
@@ -49,6 +60,22 @@ export const useAuthStore = create<AuthState>()((set) => ({
 		set({ accessToken });
 	},
 
+	setAdminElevation: (token: string, expiresAt: string) => {
+		set({
+			isAdminElevated: true,
+			adminToken: token,
+			adminExpiresAt: expiresAt,
+		});
+	},
+
+	clearAdminElevation: () => {
+		set({ isAdminElevated: false, adminToken: null, adminExpiresAt: null });
+	},
+
+	setAdminExpiry: (expiresAt: string) => {
+		set({ isAdminElevated: true, adminExpiresAt: expiresAt });
+	},
+
 	setLoading: (isLoading: boolean) => {
 		set({ isLoading });
 	},
@@ -66,6 +93,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
 			isAuthenticated: false,
 			user: null,
 			accessToken: null,
+			isAdminElevated: false,
+			adminToken: null,
+			adminExpiresAt: null,
 			error: null,
 		});
 	},
@@ -80,6 +110,11 @@ export const useIsAuthenticated = () =>
 	useAuthStore((state) => state.isAuthenticated);
 export const useUser = () => useAuthStore((state) => state.user);
 export const useAccessToken = () => useAuthStore((state) => state.accessToken);
+export const useIsAdminElevated = () =>
+	useAuthStore((state) => state.isAdminElevated);
+export const useAdminToken = () => useAuthStore((state) => state.adminToken);
+export const useAdminExpiresAt = () =>
+	useAuthStore((state) => state.adminExpiresAt);
 export const useIsLoading = () => useAuthStore((state) => state.isLoading);
 export const useIsRefreshing = () =>
 	useAuthStore((state) => state.isRefreshing);
@@ -89,6 +124,12 @@ export const useAuthError = () => useAuthStore((state) => state.error);
 export const useSetAuth = () => useAuthStore((state) => state.setAuth);
 export const useSetAccessToken = () =>
 	useAuthStore((state) => state.setAccessToken);
+export const useSetAdminElevation = () =>
+	useAuthStore((state) => state.setAdminElevation);
+export const useClearAdminElevation = () =>
+	useAuthStore((state) => state.clearAdminElevation);
+export const useSetAdminExpiry = () =>
+	useAuthStore((state) => state.setAdminExpiry);
 export const useSetLoading = () => useAuthStore((state) => state.setLoading);
 export const useSetRefreshing = () =>
 	useAuthStore((state) => state.setRefreshing);

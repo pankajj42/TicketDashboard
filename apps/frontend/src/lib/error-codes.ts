@@ -47,6 +47,17 @@ export function getFriendlyErrorMessage(
 		case ERROR_CODES.UPDATE_FAILED:
 			return "Could not update profile. Try again.";
 
+		// Admin elevation
+		case ERROR_CODES.ADMIN_PASSWORD_REQUIRED:
+			return "Please enter the admin password.";
+		case ERROR_CODES.ADMIN_PASSWORD_INVALID:
+			return "Incorrect admin password.";
+		case ERROR_CODES.ADMIN_ELEVATION_ACTIVE:
+			return "Admin elevation is active on another device. Revoke it there first.";
+		case ERROR_CODES.ADMIN_TOKEN_INVALID:
+		case ERROR_CODES.ADMIN_TOKEN_EXPIRED:
+			return "Your admin access has expired. Elevate again if needed.";
+
 		default:
 			return fallback || ERROR_MESSAGES.SERVER_ERROR;
 	}

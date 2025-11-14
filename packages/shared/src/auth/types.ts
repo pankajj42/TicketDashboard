@@ -5,6 +5,9 @@ import {
 	LogoutDeviceSchema,
 	LogoutSchema,
 	UpdateProfileSchema,
+	AdminElevationRequestSchema,
+	AdminElevationResponseSchema,
+	AdminRevokeResponseSchema,
 } from "./schemas.js";
 
 // API Response Types (clean, no internal DB fields)
@@ -29,6 +32,11 @@ export type VerifyOtpRequest = z.infer<typeof VerifyOtpSchema>;
 export type LogoutRequest = z.infer<typeof LogoutSchema>;
 export type LogoutDeviceRequest = z.infer<typeof LogoutDeviceSchema>;
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>;
+export type AdminElevationRequest = z.infer<typeof AdminElevationRequestSchema>;
+export type AdminElevationResponse = z.infer<
+	typeof AdminElevationResponseSchema
+>;
+export type AdminRevokeResponse = z.infer<typeof AdminRevokeResponseSchema>;
 
 // Responses used across the app (that aren't in timing.ts)
 export interface RefreshTokenResponse {
@@ -55,6 +63,7 @@ export interface GetCurrentUserResponse {
 		sessionId: string;
 		expiresAt: Date;
 		isAdmin?: boolean;
+		adminExpiresAt?: string; // ISO string when elevated
 	};
 }
 
@@ -79,6 +88,14 @@ export interface BaseRefreshTokenPayload {
 	deviceId: string; // Persistent device fingerprint
 }
 
+// Admin JWT payloads
+export interface BaseAdminTokenPayload {
+	userId: string;
+	sessionId: string;
+	jti: string;
+	scope: "admin:elevated";
+}
+
 // JWT Standard Claims
 export interface JwtStandardClaims {
 	iat: number; // Issued at
@@ -90,3 +107,4 @@ export interface JwtStandardClaims {
 // JWT Payload Types with standard JWT claims (for verified tokens)
 export type AccessTokenPayload = BaseAccessTokenPayload & JwtStandardClaims;
 export type RefreshTokenPayload = BaseRefreshTokenPayload & JwtStandardClaims;
+export type AdminTokenPayload = BaseAdminTokenPayload & JwtStandardClaims;

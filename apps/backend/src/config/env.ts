@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import crypto from "crypto";
 import {
 	OTP_CONFIG,
 	USER_AUTH_CONFIG,
@@ -29,6 +30,11 @@ const config = {
 
 	// Admin Password
 	ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || "admin123",
+	// Derived hash of admin password (SHA-256 hex)
+	ADMIN_PASSWORD_HASH: crypto
+		.createHash("sha256")
+		.update(process.env.ADMIN_PASSWORD || "admin123")
+		.digest("hex"),
 
 	REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
 

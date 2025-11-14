@@ -5,6 +5,8 @@ import type {
 	AccessTokenPayload,
 	BaseRefreshTokenPayload,
 	RefreshTokenPayload,
+	BaseAdminTokenPayload,
+	AdminTokenPayload,
 } from "@repo/shared";
 
 export class JwtService {
@@ -80,5 +82,43 @@ export class JwtService {
 		}
 
 		return parts[1] || null;
+	}
+
+	// ================================
+	// ADMIN TOKENS
+	// ================================
+
+	// Generate short-lived admin elevation token
+	static generateAdminToken(payload: BaseAdminTokenPayload): string {
+		return jwt.sign(payload, config.ADMIN_JWT_SECRET, {
+			expiresIn: `${config.ADMIN_PRIVILEGE_EXPIRY_MINUTES}m`,
+			issuer: "ticket-dashboard",
+			audience: "ticket-dashboard-client",
+		});
+	}
+
+	// Verify admin elevation token
+	static verifyAdminToken(token: string): AdminTokenPayload {
+		try {
+			return jwt.verify(token, config.ADMIN_JWT_SECRET, {
+				issuer: "ticket-dashboard",
+				audience: "ticket-dashboard-client",
+			}) as AdminTokenPayload;
+		} catch (error) {
+			if (error instanceof jwt.TokenExpiredError) {
+				throw new Error("ADMIN_TOKEN_EXPIRED");
+			}
+			if (error instanceof jwt.JsonWebTokenError) {
+				throw new Error("ADMIN_TOKEN_INVALID");
+			}
+			throw new Error("ADMIN_TOKEN_VERIFICATION_FAILED");
+		}
+	}
+
+	// Extract admin token from X-Admin-Token header
+	static extractAdminToken(headerValue: string | undefined): string | null {
+		if (!headerValue) return null;
+		const token = headerValue.trim();
+		return token.length > 0 ? token : null;
 	}
 }

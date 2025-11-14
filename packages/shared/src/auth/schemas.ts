@@ -36,3 +36,17 @@ export const UpdateProfileSchema = z.object({
 		.min(3, "Username must be at least 3 characters")
 		.max(50, "Username cannot exceed 50 characters"),
 });
+
+// Admin elevation schemas
+export const AdminElevationRequestSchema = z.object({
+	password: z.string().min(1, "Admin password is required"),
+});
+
+export const AdminElevationResponseSchema = z.object({
+	adminToken: z.string(),
+	expiresAt: z.string(), // ISO string
+});
+
+export const AdminRevokeResponseSchema = z.object({
+	success: z.boolean(),
+});

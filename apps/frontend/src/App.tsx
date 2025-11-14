@@ -7,8 +7,11 @@ import ProtectedRoute, { PublicRoute } from "@/components/auth/ProtectedRoute";
 import DashboardPage from "./routes/DashboardPage";
 import LoginPage from "./routes/LoginPage";
 import { Toaster } from "sonner";
+import { useAuthBroadcastSync } from "@/hooks/useAuth";
 
 function App() {
+	// Initialize cross-tab auth/admin sync once at app root
+	useAuthBroadcastSync();
 	return (
 		<ErrorBoundary>
 			<ThemeProvider

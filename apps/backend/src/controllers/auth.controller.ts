@@ -16,6 +16,9 @@ import type {
 	LogoutDeviceResponse,
 	ApiErrorResponse,
 	UpdateProfileRequest,
+	AdminElevationRequest,
+	AdminElevationResponse,
+	AdminRevokeResponse,
 } from "@repo/shared";
 import {
 	LoginSchema,
@@ -23,7 +26,10 @@ import {
 	LogoutSchema,
 	LogoutDeviceSchema,
 	UpdateProfileSchema,
+	AdminElevationRequestSchema,
 } from "@repo/shared";
+import { AdminService } from "../services/admin.service.js";
+import { UserRepository } from "../repositories/user.repository.js";
 
 export class AuthController {
 	/**
@@ -324,6 +330,24 @@ export class AuthController {
 				return;
 			}
 
+			const isAdmin = await AdminService.isSessionElevated(
+				req.user.userId,
+				req.user.sessionId
+			);
+
+			// Include admin expiry so the frontend can restore countdown after refresh
+			let adminExpiresAt: string | undefined = undefined;
+			if (isAdmin) {
+				const dbUser = await UserRepository.findById(req.user.userId);
+				if (
+					dbUser?.adminElevatedSessionId === req.user.sessionId &&
+					dbUser.adminElevatedUntil &&
+					dbUser.adminElevatedUntil > new Date()
+				) {
+					adminExpiresAt = dbUser.adminElevatedUntil.toISOString();
+				}
+			}
+
 			ResponseHelper.sendSuccess(res, {
 				user: {
 					id: req.user.userId,
@@ -333,10 +357,116 @@ export class AuthController {
 				session: {
 					sessionId: req.user.sessionId,
 					expiresAt: new Date(req.user.exp * 1000),
+					isAdmin,
+					adminExpiresAt,
 				},
 			});
 		} catch (error) {
 			ErrorHandler.handleError(res, error, "get current user");
+		}
+	}
+
+	/**
+	 * POST /api/auth/admin-elevation - Elevate privileges for 15 minutes
+	 */
+	static async elevateAdmin(
+		req: Request<{}, {}, AdminElevationRequest>,
+		res: Response<AdminElevationResponse | ApiErrorResponse>
+	): Promise<void> {
+		try {
+			if (!req.user) {
+				ErrorHandler.handleAuthError(
+					res,
+					"Authentication required",
+					ERROR_CODES.NOT_AUTHENTICATED
+				);
+				return;
+			}
+
+			const { password } = AdminElevationRequestSchema.parse(req.body);
+			const device = ResponseHelper.extractDeviceInfo(req);
+
+			const { adminToken, expiresAt } = await AdminService.elevate({
+				userId: req.user.userId,
+				sessionId: req.user.sessionId,
+				password,
+				ipAddress: device.ipAddress,
+				userAgent: device.userAgent,
+			});
+
+			ResponseHelper.sendSuccess<AdminElevationResponse>(res, {
+				adminToken,
+				expiresAt: expiresAt.toISOString(),
+			});
+		} catch (error) {
+			if (error instanceof Error) {
+				switch (error.message) {
+					case "ADMIN_PASSWORD_REQUIRED":
+						ErrorHandler.handleBadRequestError(
+							res,
+							"Admin password required",
+							ERROR_CODES.ADMIN_PASSWORD_REQUIRED
+						);
+						return;
+					case "ADMIN_PASSWORD_INVALID":
+						ErrorHandler.handleAuthError(
+							res,
+							"Invalid admin password",
+							ERROR_CODES.ADMIN_PASSWORD_INVALID
+						);
+						return;
+					case "ADMIN_ELEVATION_ACTIVE":
+						ErrorHandler.handleAuthError(
+							res,
+							"Admin elevation is already active on another device",
+							ERROR_CODES.ADMIN_ELEVATION_ACTIVE
+						);
+						return;
+					default:
+					// fallthrough
+				}
+			}
+			ErrorHandler.handleError(res, error, "elevate admin");
+		}
+	}
+
+	/**
+	 * DELETE /api/auth/admin-elevation - Revoke admin elevation
+	 */
+	static async revokeAdmin(
+		req: Request,
+		res: Response<AdminRevokeResponse | ApiErrorResponse>
+	): Promise<void> {
+		try {
+			if (!req.user) {
+				ErrorHandler.handleAuthError(
+					res,
+					"Authentication required",
+					ERROR_CODES.NOT_AUTHENTICATED
+				);
+				return;
+			}
+
+			await AdminService.revoke({
+				userId: req.user.userId,
+				sessionId: req.user.sessionId,
+			});
+
+			ResponseHelper.sendSuccess<AdminRevokeResponse>(res, {
+				success: true,
+			});
+		} catch (error) {
+			if (
+				error instanceof Error &&
+				error.message === "ADMIN_ELEVATION_NOT_FOUND"
+			) {
+				ErrorHandler.handleNotFoundError(
+					res,
+					"No active admin elevation found"
+				);
+				return;
+			}
+			ErrorHandler.handleError(res, error, "revoke admin");
 		}
 	}
 

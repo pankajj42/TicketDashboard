@@ -5,6 +5,7 @@ import CreateTicket from "./create-ticket";
 import UserActions from "./user-actions";
 import { ThemeToggle } from "./theme/theme-toggle";
 import { title } from "@repo/shared";
+import AdminCountdown from "./admin/admin-countdown";
 
 type AppHeaderProps = {
 	onAddCard: (title: string) => void;
@@ -31,6 +32,7 @@ export default function AppHeader({ onAddCard }: AppHeaderProps) {
 				</div>
 
 				<div className="flex items-center gap-3 pr-4">
+					<AdminCountdown />
 					<CreateTicket onAddCard={onAddCard} />
 					<ThemeToggle />
 					<UserActions />

@@ -12,6 +12,9 @@ import type {
 	ApiErrorResponse,
 	ApiUser,
 	UpdateProfileRequest,
+	AdminElevationRequest,
+	AdminElevationResponse,
+	AdminRevokeResponse,
 } from "@repo/shared";
 import { API_CONFIG } from "@/lib/constants";
 
@@ -307,6 +310,32 @@ export class AuthApiService {
 			{
 				Authorization: `Bearer ${accessToken}`,
 			}
+		);
+	}
+
+	/**
+	 * Elevate admin privileges for current session
+	 */
+	static async elevateAdmin(
+		accessToken: string,
+		payload: AdminElevationRequest
+	): Promise<AdminElevationResponse> {
+		return httpClient.post<AdminElevationResponse>(
+			`${API_CONFIG.PREFIX}/admin-elevation`,
+			payload,
+			{ Authorization: `Bearer ${accessToken}` }
+		);
+	}
+
+	/**
+	 * Revoke admin privileges for current session
+	 */
+	static async revokeAdmin(
+		accessToken: string
+	): Promise<AdminRevokeResponse> {
+		return httpClient.delete<AdminRevokeResponse>(
+			`${API_CONFIG.PREFIX}/admin-elevation`,
+			{ Authorization: `Bearer ${accessToken}` }
 		);
 	}
 }

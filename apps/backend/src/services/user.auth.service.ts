@@ -60,6 +60,20 @@ export class UserAuthService {
 		// Get or create user
 		const { user, isNewUser } = await this.getOrCreateUser(email);
 
+		// If user has an active admin elevation on another session, block login
+		if (
+			user.adminElevatedUntil &&
+			user.adminElevatedUntil > new Date() &&
+			user.adminElevatedSessionId
+		) {
+			return {
+				success: false,
+				message:
+					"Admin elevation is active on another device. Revoke it before logging in.",
+				code: "ADMIN_ELEVATION_ACTIVE",
+			};
+		}
+
 		// Create session
 		const sessionData = await SessionService.createSession({
 			userId: user.id,

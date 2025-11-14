@@ -13,10 +13,16 @@ import { toast } from "sonner";
 import SettingsDialog from "./settings/settings-dialog";
 import React from "react";
 import { AsyncMenuItem } from "@/components/common/async-menu-item";
+import AdminAccessDialog from "./admin/admin-access-dialog";
+import { useIsAdminElevated } from "@/store/auth.store";
 
 export default function UserActions() {
 	const { user, logout } = useAuth();
 	const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+	const [isAdminDialogOpen, setIsAdminDialogOpen] = React.useState(false);
+	const [isAdminRevokeDialogOpen, setIsAdminRevokeDialogOpen] =
+		React.useState(false);
+	const isAdmin = useIsAdminElevated();
 	// Logout handled via AsyncMenuItem spinner state
 
 	// Get user initials for avatar
@@ -38,6 +44,16 @@ export default function UserActions() {
 
 	return (
 		<>
+			<AdminAccessDialog
+				open={isAdminDialogOpen}
+				onOpenChange={setIsAdminDialogOpen}
+				mode="elevate"
+			/>
+			<AdminAccessDialog
+				open={isAdminRevokeDialogOpen}
+				onOpenChange={setIsAdminRevokeDialogOpen}
+				mode="revoke"
+			/>
 			<SettingsDialog
 				open={isSettingsOpen}
 				onOpenChange={setIsSettingsOpen}
@@ -68,10 +84,18 @@ export default function UserActions() {
 
 					<DropdownMenuItem
 						className="m-2 text-md text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"
-						disabled={false}
+						onSelect={() => {
+							if (isAdmin) {
+								setIsAdminRevokeDialogOpen(true);
+							} else {
+								setIsAdminDialogOpen(true);
+							}
+						}}
 					>
 						<ShieldUser />
-						<span>Admin access</span>
+						<span>
+							{isAdmin ? "Revoke admin access" : "Admin access"}
+						</span>
 					</DropdownMenuItem>
 					<DropdownMenuItem
 						className="m-2 text-md text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"

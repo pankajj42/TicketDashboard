@@ -8,6 +8,7 @@ import { ResponseHelper } from "../utils/response-helper.js";
 import type { AccessTokenPayload, ApiErrorResponse } from "@repo/shared";
 import config from "../config/env.js";
 import { redis } from "../lib/redis.js";
+import { AdminService } from "../services/admin.service.js";
 
 // Enhanced user data for request object
 interface RequestUser extends AccessTokenPayload {
@@ -21,6 +22,7 @@ declare global {
 		interface Request {
 			user?: RequestUser;
 			sessionId?: string;
+			isAdmin?: boolean;
 		}
 	}
 }
@@ -196,6 +198,106 @@ async function validateTokenAndGetUser(
 		username: user.username,
 	};
 }
+
+/**
+ * Optional admin status attachment based on X-Admin-Token header and server state.
+ * Does not enforce admin-only access; it only sets req.isAdmin = true/false.
+ */
+export const attachAdminStatus = async (
+	req: Request,
+	_res: Response<ApiErrorResponse>,
+	next: NextFunction
+): Promise<void> => {
+	try {
+		req.isAdmin = false;
+		if (!req.user) return next();
+
+		const header = req.headers["x-admin-token"] as string | undefined;
+		const token = JwtService.extractAdminToken(header);
+		if (!token) {
+			// Still consider admin via server state (defense-in-depth)
+			req.isAdmin = await AdminService.isSessionElevated(
+				req.user.userId,
+				req.user.sessionId
+			);
+			return next();
+		}
+
+		// Verify token
+		const payload = JwtService.verifyAdminToken(token);
+		if (
+			payload.userId !== req.user.userId ||
+			payload.sessionId !== req.user.sessionId ||
+			payload.scope !== "admin:elevated"
+		) {
+			return next();
+		}
+
+		// Check allowlist in Redis
+		const allow = await redis.get(`admin:jti:${payload.jti}`);
+		if (!allow) return next();
+
+		// Cross-check server state
+		const ok = await AdminService.isSessionElevated(
+			req.user.userId,
+			req.user.sessionId
+		);
+		req.isAdmin = ok;
+	} catch (e) {
+		// Fail-closed on token but do not throw; just mark as not admin
+		req.isAdmin = false;
+	} finally {
+		next();
+	}
+};
+
+/**
+ * Lightweight guard to enforce admin-only access.
+ * Assumes authenticateToken has already run. It will attempt to attach admin
+ * status (using attachAdminStatus) if not already present, then checks req.isAdmin.
+ *
+ * Usage:
+ *   router.get(
+ *     "/admin/route",
+ *     authenticateToken,
+ *     attachAdminStatus, // optional but recommended
+ *     ensureAdmin,
+ *     handler
+ *   );
+ */
+export const ensureAdmin = async (
+	req: Request,
+	res: Response<ApiErrorResponse>,
+	next: NextFunction
+): Promise<void> => {
+	// Require authentication first
+	if (!req.user) {
+		ErrorHandler.handleAuthError(
+			res,
+			"Authentication required",
+			ERROR_CODES.NOT_AUTHENTICATED
+		);
+		return;
+	}
+
+	// If admin status hasn't been evaluated yet, attach it now
+	if (typeof req.isAdmin === "undefined") {
+		// Call attachAdminStatus with a no-op next to avoid advancing the chain prematurely
+		const noopNext = (() => {}) as NextFunction;
+		await attachAdminStatus(req, res, noopNext);
+	}
+
+	if (!req.isAdmin) {
+		// Forbidden for non-admin sessions
+		res.status(403).json({
+			error: "Admin privileges required",
+			code: ERROR_CODES.AUTH_ERROR,
+		});
+		return;
+	}
+
+	next();
+};
 
 /**
  * Clean expired rate limit attempts
