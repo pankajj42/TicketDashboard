@@ -80,7 +80,10 @@ export function AppSidebar() {
 								>
 									<a
 										href="#"
-										onClick={() => setViewMode("CREATED")}
+										onClick={() => {
+											setViewMode("CREATED");
+											setSelected(null);
+										}}
 									>
 										<ClipboardList className="mr-2" />
 										<span>Created Tickets</span>
@@ -94,7 +97,10 @@ export function AppSidebar() {
 								>
 									<a
 										href="#"
-										onClick={() => setViewMode("ASSIGNED")}
+										onClick={() => {
+											setViewMode("ASSIGNED");
+											setSelected(null);
+										}}
 									>
 										<ClipboardCheck className="mr-2" />
 										<span>Assigned Tickets</span>
@@ -180,7 +186,9 @@ export function AppSidebar() {
 												<button
 													title={
 														p.isSubscribed
-															? "Unsubscribe"
+															? p.hasMyTickets
+																? "Cannot unsubscribe: you have tickets in this project"
+																: "Unsubscribe"
 															: "Subscribe"
 													}
 													className="rounded p-1 hover:bg-gray-200 dark:hover:bg-gray-800 disabled:opacity-50"
@@ -191,7 +199,9 @@ export function AppSidebar() {
 													disabled={
 														!!subscriptionLoading[
 															p.id
-														]
+														] ||
+														(p.isSubscribed &&
+															!!p.hasMyTickets)
 													}
 												>
 													{subscriptionLoading[

@@ -5,6 +5,7 @@ import { UserRepository } from "../repositories/user.repository.js";
 import { redis } from "../lib/redis.js";
 import config from "../config/env.js";
 import crypto from "crypto";
+import { Realtime } from "./realtime.service.js";
 
 export class AdminService {
 	static adminUserKey(userId: string) {
@@ -83,6 +84,17 @@ export class AdminService {
 			scope: "admin:elevated",
 		});
 
+		// Track expiry in a sorted set for scheduler-based notifications
+		try {
+			await redis.zadd(
+				"admin:expirations",
+				expiresAt.getTime(),
+				`${options.userId}:${options.sessionId}`
+			);
+		} catch (e) {
+			console.warn("Failed to add admin expiry to zset", e);
+		}
+
 		return { adminToken, expiresAt };
 	}
 
@@ -115,6 +127,25 @@ export class AdminService {
 			}
 		} finally {
 			await redis.del(userKey);
+		}
+
+		// Notify current user sessions that admin was revoked
+		try {
+			Realtime.notifyUser(options.userId, "admin:revoked", {
+				sessionId: options.sessionId,
+			});
+		} catch (e) {
+			console.warn("Realtime notify admin:revoked failed", e);
+		}
+
+		// Remove from expiry tracking set
+		try {
+			await redis.zrem(
+				"admin:expirations",
+				`${options.userId}:${options.sessionId}`
+			);
+		} catch (e) {
+			console.warn("Failed to remove admin expiry from zset", e);
 		}
 
 		return { success: true };

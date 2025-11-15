@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { ProjectApiService } from "@/services/project.api";
+import { ApiError } from "@/services/http";
 import { subscribeProject, unsubscribeProject } from "@/lib/realtime";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
@@ -9,6 +10,8 @@ export type ProjectItem = {
 	name: string;
 	description?: string | null;
 	isSubscribed?: boolean;
+	hasMyTickets?: boolean;
+	subscriberCount?: number;
 };
 
 type ViewMode = "BOARD" | "CREATED" | "ASSIGNED";
@@ -42,7 +45,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			set((s) => ({
 				projects: res.projects,
 				selectedProjectId:
-					s.selectedProjectId ?? res.projects[0]?.id ?? null,
+					s.selectedProjectId !== null
+						? s.selectedProjectId
+						: s.viewMode === "BOARD"
+							? (res.projects[0]?.id ?? null)
+							: null,
 				loadingProjects: false,
 			}));
 		} catch (e) {
@@ -55,6 +62,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 		if (!token) return;
 		const p = get().projects.find((x) => x.id === projectId);
 		const subscribed = !!p?.isSubscribed;
+		// If attempting to unsubscribe while having tickets, block locally with friendly message
+		if (subscribed && p?.hasMyTickets) {
+			toast.error(
+				"You have created or are assigned tickets in this project. Unsubscribe is not allowed."
+			);
+			return;
+		}
 		set((s) => ({
 			subscriptionLoading: {
 				...s.subscriptionLoading,
@@ -65,14 +79,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			if (subscribed) {
 				await ProjectApiService.unsubscribe(projectId, token);
 				unsubscribeProject(projectId);
-				toast.success("Unsubscribed from project");
 			} else {
 				await ProjectApiService.subscribe(projectId, token);
 				subscribeProject(projectId);
-				toast.success("Subscribed to project");
 			}
 		} catch (e) {
-			toast.error("Failed to update subscription");
+			const err = e as any;
+			if (
+				err instanceof ApiError &&
+				err.code === "CANNOT_UNSUBSCRIBE_HAS_TICKETS"
+			) {
+				toast.error(
+					"You have created or are assigned tickets in this project. Unsubscribe is not allowed."
+				);
+			} else {
+				toast.error("Failed to update subscription");
+			}
 			set((s) => ({
 				subscriptionLoading: {
 					...s.subscriptionLoading,

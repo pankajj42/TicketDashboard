@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Monitor, LogOut } from "lucide-react";
 import { AsyncButton } from "@/components/common/async-button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAccessToken } from "@/store/auth.store";
+import { AuthApiService } from "@/services/auth.api";
 
 type SecurityTabProps = {
 	getUserDevices: () => Promise<any[]>;
@@ -21,12 +23,35 @@ export function SecurityTab({
 	const [activeDeviceId, setActiveDeviceId] = React.useState<string | null>(
 		null
 	);
+	const accessToken = useAccessToken();
+	const [currentSessionId, setCurrentSessionId] = React.useState<
+		string | null
+	>(null);
 
 	const devicesQuery = useQuery({
 		queryKey: ["devices"],
 		queryFn: getUserDevices,
 		initialData: [],
 	});
+
+	// Fetch current session id to mark "This device"
+	React.useEffect(() => {
+		let mounted = true;
+		(async () => {
+			if (!accessToken) return;
+			try {
+				const me = await AuthApiService.getCurrentUser(accessToken);
+				if (!mounted) return;
+				const sid = (me as any)?.session?.sessionId || null;
+				setCurrentSessionId(sid);
+			} catch {
+				// ignore
+			}
+		})();
+		return () => {
+			mounted = false;
+		};
+	}, [accessToken]);
 
 	// Derived busy flags for disabling interactions across the dialog
 	const isRefreshing = devicesQuery.isFetching || devicesQuery.isLoading;
@@ -134,6 +159,12 @@ export function SecurityTab({
 												<p className="font-medium text-gray-900 dark:text-gray-200">
 													{device.deviceName ||
 														"Unknown Device"}
+													{currentSessionId ===
+														device.id && (
+														<span className="ml-2 inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-emerald-600 text-white align-middle">
+															This device
+														</span>
+													)}
 												</p>
 												<p className="text-sm text-gray-500 dark:text-gray-400">
 													{device.userAgent?.slice(

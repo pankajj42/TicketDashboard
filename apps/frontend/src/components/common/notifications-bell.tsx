@@ -1,10 +1,9 @@
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAccessToken } from "@/store/auth.store";
 import { useNotificationStore } from "@/store/notification.store";
 import { NotificationApiService } from "@/services/notification.api";
-import { API_CONFIG } from "@/lib/constants";
-import { connectRealtime, getSocket } from "@/lib/realtime";
+import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
 import {
 	DropdownMenu,
 	DropdownMenuTrigger,
@@ -27,6 +26,23 @@ export default function NotificationsBell() {
 		markAllReadLocal,
 	} = useNotificationStore();
 
+	// Stable callback for realtime notifications
+	const handleRealtimeNotification = useCallback(
+		(payload: any) => {
+			if (!payload?.id) return;
+			addNotification({
+				id: payload.id,
+				message: payload.message,
+				read: payload.read ?? false,
+				createdAt: payload.createdAt ?? new Date().toISOString(),
+			});
+		},
+		[addNotification]
+	);
+
+	// Hook to subscribe to realtime events (must be at top-level, not inside another hook callback)
+	useNotificationsRealtime(handleRealtimeNotification);
+
 	useEffect(() => {
 		if (!token) return;
 		// Load all notifications for listing; unreadCount is derived in store
@@ -36,20 +52,7 @@ export default function NotificationsBell() {
 				setNotifications(res.notifications);
 			})
 			.finally(() => setLoadingList(false));
-		const sock = connectRealtime(API_CONFIG.BASE_URL);
-		sock?.on("notification:new", (payload: any) => {
-			if (!payload?.id) return;
-			addNotification({
-				id: payload.id,
-				message: payload.message,
-				read: payload.read ?? false,
-				createdAt: payload.createdAt ?? new Date().toISOString(),
-			});
-		});
-		return () => {
-			getSocket()?.off("notification:new");
-		};
-	}, [token, setNotifications, addNotification]);
+	}, [token, setNotifications]);
 
 	async function markAllRead() {
 		if (!token) return;

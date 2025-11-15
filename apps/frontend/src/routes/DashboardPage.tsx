@@ -7,11 +7,18 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { useProjectStore } from "@/store/project.store";
 import { useAccessToken } from "@/store/auth.store";
 import { TicketApiService } from "@/services/ticket.api";
+import { httpClient } from "@/services/http";
 import type { TicketStatus } from "@repo/shared";
 import TicketDialog from "@/components/ticket/ticket-dialog";
 import { toast } from "sonner";
 import { CardSkeleton } from "@/components/loading-skeletons";
 import TicketCardsView from "@/components/ticket/ticket-cards-view";
+import { useProjectRealtime } from "@/hooks/useProjectRealtime";
+import { useAssignmentToasts } from "@/hooks/useAssignmentToasts";
+import { useStatusToasts } from "@/hooks/useStatusToasts";
+import { useCreatedToasts } from "@/hooks/useCreatedToasts";
+import { useUpdatedToasts } from "@/hooks/useUpdatedToasts";
+import { useProjectsRealtime } from "@/hooks/useProjectsRealtime";
 
 const DashboardPage = () => {
 	const { selectedProjectId, viewMode } = useProjectStore();
@@ -26,6 +33,20 @@ const DashboardPage = () => {
 	const disabledIds = useMemo(
 		() => Array.from(pendingMoveIds),
 		[pendingMoveIds]
+	);
+
+	// Enforce fixed column order irrespective of updates
+	const COLUMN_ORDER = useMemo(
+		() => ["PROPOSED", "TODO", "INPROGRESS", "DONE", "DEPLOYED"],
+		[]
+	);
+	const orderColumns = useCallback(
+		(cols: Column[]): Column[] =>
+			[...cols].sort(
+				(a, b) =>
+					COLUMN_ORDER.indexOf(a.id) - COLUMN_ORDER.indexOf(b.id)
+			),
+		[COLUMN_ORDER]
 	);
 
 	const fetchTickets = useCallback(async () => {
@@ -54,7 +75,7 @@ const DashboardPage = () => {
 					description: t.description,
 				});
 			}
-			setColumns(Object.values(map));
+			setColumns(orderColumns(Object.values(map)));
 		} catch (e: any) {
 			toast.error(e?.message || "Failed to load tickets");
 		} finally {
@@ -65,6 +86,89 @@ const DashboardPage = () => {
 	useEffect(() => {
 		fetchTickets();
 	}, [fetchTickets]);
+
+	// Helpers to perform incremental mutations
+	const addOrUpdateTicket = async (ticketId: string) => {
+		try {
+			const data = await httpClient.get<{ ticket: any }>(
+				`/tickets/${ticketId}`,
+				{ Authorization: `Bearer ${token}` }
+			);
+			const t = data.ticket;
+			if (!t || t.projectId !== selectedProjectId) return;
+			setColumns((prev) => {
+				// Build map for easier mutation
+				const map: Record<string, Column> = {};
+				for (const c of prev) map[c.id] = { ...c, items: [...c.items] };
+				// Remove ticket if it exists
+				for (const c of Object.values(map)) {
+					c.items = c.items.filter((i) => i.id !== ticketId);
+				}
+				// Insert into its status column
+				if (!map[t.status]) {
+					map[t.status] = {
+						id: t.status,
+						title: t.status,
+						items: [],
+					};
+				}
+				map[t.status].items.push({
+					id: t.id,
+					title: t.title,
+					description: t.description,
+				});
+				return orderColumns(Object.values(map));
+			});
+		} catch {
+			/* Silently ignore single fetch errors */
+		}
+	};
+
+	const moveTicketStatus = (ticketId: string, status: string) => {
+		setColumns((prev) => {
+			const map: Record<string, Column> = {};
+			for (const c of prev) map[c.id] = { ...c, items: [...c.items] };
+			let found: {
+				id: string;
+				title: string;
+				description?: string;
+			} | null = null;
+			for (const c of Object.values(map)) {
+				const idx = c.items.findIndex((i) => i.id === ticketId);
+				if (idx >= 0) {
+					found = c.items[idx];
+					c.items.splice(idx, 1);
+					break;
+				}
+			}
+			if (!found) {
+				return prev;
+			}
+			if (!map[status]) {
+				map[status] = { id: status, title: status, items: [] };
+			}
+			map[status].items.push(found);
+			return orderColumns(Object.values(map));
+		});
+	};
+
+	// Realtime subscription via shared hook with reconnect guard
+	useProjectRealtime(selectedProjectId, {
+		onTicketCreated: (id) => addOrUpdateTicket(id),
+		onTicketUpdated: (id) => addOrUpdateTicket(id),
+		onTicketStatus: (id, status) => moveTicketStatus(id, status),
+	});
+
+	// Toasts for assignment updates (global listener, no projectId arg now)
+	useAssignmentToasts();
+	// Toasts for status updates from others
+	useStatusToasts(selectedProjectId);
+	// Toasts for ticket created by others
+	useCreatedToasts(selectedProjectId);
+	// Toasts for ticket updated by others
+	useUpdatedToasts(selectedProjectId);
+	// Realtime updates for project list (create/update)
+	useProjectsRealtime();
 
 	useEffect(() => {
 		const handler = () => fetchTickets();
@@ -126,7 +230,7 @@ const DashboardPage = () => {
 								) {
 									toast.success("Ticket unassigned");
 								}
-							} catch (e) {
+							} catch (e: any) {
 								const msg =
 									e?.message || "Failed to change status";
 								toast.error(msg);

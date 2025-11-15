@@ -9,6 +9,8 @@ export class ProjectApiService {
 				name: string;
 				description?: string | null;
 				isSubscribed?: boolean;
+				hasMyTickets?: boolean;
+				subscriberCount?: number;
 			}>;
 		}>(`/projects`, { Authorization: `Bearer ${accessToken}` });
 	}

@@ -11,8 +11,16 @@ import AdminCountdown from "./admin/admin-countdown";
 
 export default function AppHeader() {
 	const { toggleSidebar } = useSidebar();
-	const { projects, selectedProjectId, loadingProjects } = useProjectStore();
+	const { projects, selectedProjectId, loadingProjects, viewMode } =
+		useProjectStore();
 	const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
+	const titleText =
+		viewMode === "CREATED"
+			? "Created Tickets"
+			: viewMode === "ASSIGNED"
+				? "Assigned Tickets"
+				: selectedProject?.name || "None";
 
 	return (
 		<div className="shrink-0 p-4 border-b bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800">
@@ -35,9 +43,10 @@ export default function AppHeader() {
 						) : (
 							<>
 								<h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
-									{selectedProject?.name || "None"}
+									{titleText}
 								</h1>
-								{selectedProject?.description ? (
+								{viewMode === "BOARD" &&
+								selectedProject?.description ? (
 									<div className="text-sm text-gray-600 dark:text-gray-400">
 										{selectedProject.description}
 									</div>

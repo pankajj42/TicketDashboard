@@ -12,6 +12,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
 import { useProjectStore } from "@/store/project.store";
+import { ProjectApiService } from "@/services/project.api";
 import { useAccessToken } from "@/store/auth.store";
 import { TicketApiService } from "@/services/ticket.api";
 import { Loader2 } from "lucide-react";
@@ -22,7 +23,7 @@ export default function CreateTicket() {
 	const [newTitle, setNewTitle] = useState("");
 	const [description, setDescription] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const { selectedProjectId } = useProjectStore();
+	const { selectedProjectId, projects, loadProjects } = useProjectStore();
 	const token = useAccessToken();
 
 	async function handleAddCard() {
@@ -39,6 +40,22 @@ export default function CreateTicket() {
 				token
 			);
 			toast.success("Ticket created");
+			// Auto-subscribe user to project if not already subscribed
+			const projectMeta = projects.find(
+				(p) => p.id === selectedProjectId
+			);
+			if (projectMeta && !projectMeta.isSubscribed) {
+				try {
+					await ProjectApiService.subscribe(selectedProjectId, token);
+					toast.success("Subscribed to project automatically");
+					// Refresh project list to update subscription flag
+					loadProjects();
+				} catch (e: any) {
+					toast.error(
+						"Failed to auto-subscribe to project; subscribe manually."
+					);
+				}
+			}
 			setNewTitle("");
 			setDescription("");
 			setOpenNew(false);
@@ -94,6 +111,7 @@ export default function CreateTicket() {
 						value={description}
 						onChange={(e) => setDescription(e.target.value)}
 						placeholder="Short description"
+						onKeyDown={handleKeyDown}
 						className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-200 placeholder:text-gray-500 dark:placeholder:text-gray-400"
 					/>
 				</div>

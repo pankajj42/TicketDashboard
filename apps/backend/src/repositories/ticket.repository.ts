@@ -7,6 +7,18 @@ import type {
 import { BaseRepository } from "./base.repository.js";
 
 export class TicketRepository extends BaseRepository {
+	static async hasUserTicketsInProject(
+		projectId: string,
+		userId: string
+	): Promise<boolean> {
+		const count = await super.prisma.ticket.count({
+			where: {
+				projectId,
+				OR: [{ createdById: userId }, { assignedToId: userId }],
+			},
+		});
+		return count > 0;
+	}
 	static async create(
 		projectId: string,
 		createdById: string,
@@ -315,8 +327,8 @@ export class TicketRepository extends BaseRepository {
 				// Assignment change audit
 				if (
 					typeof updates.newAssignedToId !== "undefined" &&
-					(ticket.assignedToId || null) !==
-						(updates.newAssignedToId || null)
+					(current.assignedToId || null) !==
+						(ticket.assignedToId || null)
 				) {
 					const assignUpdate = await tx.ticketUpdate.create({
 						data: {
@@ -340,13 +352,25 @@ export class TicketRepository extends BaseRepository {
 		);
 	}
 
-	static async findProjectMeta(
-		ticketId: string
-	): Promise<{ projectId: string; title: string } | null> {
+	static async findProjectMeta(ticketId: string): Promise<{
+		projectId: string;
+		projectName: string | null;
+		ticketTitle: string;
+	} | null> {
 		const t = await super.prisma.ticket.findUnique({
 			where: { id: ticketId },
-			select: { projectId: true, title: true },
+			select: {
+				projectId: true,
+				title: true,
+				project: { select: { name: true } },
+			},
 		});
-		return t ? { projectId: t.projectId, title: t.title } : null;
+		return t
+			? {
+					projectId: t.projectId,
+					projectName: t.project?.name ?? null,
+					ticketTitle: t.title,
+				}
+			: null;
 	}
 }

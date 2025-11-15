@@ -1,5 +1,10 @@
 import React from "react";
-import { useIsAdminElevated, useAdminExpiresAt } from "@/store/auth.store";
+import {
+	useIsAdminElevated,
+	useAdminExpiresAt,
+	useClearAdminElevation,
+} from "@/store/auth.store";
+import { toast } from "sonner";
 import AdminAccessDialog from "./admin-access-dialog";
 
 function formatRemaining(ms: number) {
@@ -15,6 +20,7 @@ function formatRemaining(ms: number) {
 export default function AdminCountdown() {
 	const isAdmin = useIsAdminElevated();
 	const expiresAt = useAdminExpiresAt();
+	const clearAdmin = useClearAdminElevation();
 
 	const [remainingLabel, setRemainingLabel] = React.useState<string>("00:00");
 	const [msLeft, setMsLeft] = React.useState<number>(0);
@@ -25,12 +31,20 @@ export default function AdminCountdown() {
 		if (!isAdmin || !expiresAt) return;
 		const expiry = new Date(expiresAt).getTime();
 
+		let expiredNotified = false;
 		const tick = () => {
 			const now = Date.now();
 			const diff = expiry - now;
 			setMsLeft(diff);
 			if (diff <= 0) {
 				setRemainingLabel("00:00");
+				if (!expiredNotified) {
+					clearAdmin();
+					toast("Admin privileges revoked", {
+						description: "Elevation expired.",
+					});
+					expiredNotified = true;
+				}
 				return false;
 			}
 			setRemainingLabel(formatRemaining(diff));
@@ -44,7 +58,7 @@ export default function AdminCountdown() {
 			if (!keep) clearInterval(id);
 		}, 1000);
 		return () => clearInterval(id);
-	}, [isAdmin, expiresAt]);
+	}, [isAdmin, expiresAt, clearAdmin]);
 
 	if (!isAdmin || !expiresAt) return null;
 

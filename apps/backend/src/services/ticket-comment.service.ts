@@ -5,6 +5,7 @@ import { redis } from "../lib/redis.js";
 import { Realtime } from "./realtime.service.js";
 import { TicketCommentRepository } from "../repositories/ticket-comment.repository.js";
 import { TicketRepository } from "../repositories/ticket.repository.js";
+import { UserRepository } from "../repositories/user.repository.js";
 
 export class TicketCommentService {
 	static async addComment(ticketId: string, userId: string, body: string) {
@@ -18,7 +19,14 @@ export class TicketCommentService {
 		const t = await TicketRepository.findProjectMeta(ticketId);
 		if (t) {
 			const subs = await ProjectRepository.getSubscribers(t.projectId);
-			const message = `New comment on: ${t.title}`;
+			// Include actor and snippet in message
+			let actorName = "someone";
+			try {
+				const u = await UserRepository.findById(userId);
+				actorName = u?.username || u?.email || "someone";
+			} catch {}
+			const snippet = body.slice(0, 140);
+			const message = `Comment by ${actorName} on ${t.title}: ${snippet}`;
 			await NotificationRepository.createMany(
 				subs.map((s) => ({
 					recipientId: s.id,
@@ -31,7 +39,7 @@ export class TicketCommentService {
 				if (!isOnline) {
 					await queue.addNotificationJob({
 						email: s.email,
-						subject: "Ticket Comment",
+						subject: `New Comment by ${actorName}`,
 						message,
 					});
 				} else {
@@ -40,6 +48,12 @@ export class TicketCommentService {
 			}
 			Realtime.broadcastToProject(t.projectId, "ticket:comment", {
 				ticketId,
+				commentId: result.comment.id,
+				body,
+				actorId: userId,
+				actorName,
+				createdAt: result.comment.createdAt,
+				ticketTitle: t.title,
 			});
 		}
 		return result.comment;

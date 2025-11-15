@@ -57,6 +57,14 @@ export class ProjectRepository extends BaseRepository {
 		return project?.subscribers ?? [];
 	}
 
+	static async countSubscribers(projectId: string): Promise<number> {
+		const res = await super.prisma.project.findUnique({
+			where: { id: projectId },
+			select: { _count: { select: { subscribers: true } } },
+		});
+		return (res as any)?._count?.subscribers ?? 0;
+	}
+
 	static async findSubscribedProjectIdsByUser(
 		userId: string
 	): Promise<string[]> {
@@ -75,6 +83,8 @@ export class ProjectRepository extends BaseRepository {
 			createdAt: Date;
 			updatedAt: Date;
 			isSubscribed: boolean;
+			hasMyTickets: boolean;
+			subscriberCount: number;
 		}>
 	> {
 		const projects = await super.prisma.project.findMany({
@@ -86,6 +96,14 @@ export class ProjectRepository extends BaseRepository {
 				createdAt: true,
 				updatedAt: true,
 				subscribers: { where: { id: userId }, select: { id: true } },
+				tickets: {
+					where: {
+						OR: [{ createdById: userId }, { assignedToId: userId }],
+					},
+					select: { id: true },
+					take: 1,
+				},
+				_count: { select: { subscribers: true } },
 			},
 		});
 		return projects.map((p) => ({
@@ -95,6 +113,8 @@ export class ProjectRepository extends BaseRepository {
 			createdAt: p.createdAt,
 			updatedAt: p.updatedAt,
 			isSubscribed: (p.subscribers?.length ?? 0) > 0,
+			hasMyTickets: (p as any).tickets?.length > 0,
+			subscriberCount: (p as any)._count?.subscribers ?? 0,
 		}));
 	}
 }

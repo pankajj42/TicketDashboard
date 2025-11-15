@@ -68,6 +68,9 @@ export default function CreateProjectButton() {
 						<Input
 							value={name}
 							onChange={(e) => setName(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") onCreate();
+							}}
 						/>
 					</div>
 					<div>
@@ -75,6 +78,9 @@ export default function CreateProjectButton() {
 						<Input
 							value={description}
 							onChange={(e) => setDescription(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") onCreate();
+							}}
 						/>
 					</div>
 				</div>

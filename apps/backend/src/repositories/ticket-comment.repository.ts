@@ -1,5 +1,6 @@
 import type { TicketComment, Prisma } from "../generated/prisma/client.js";
 import { BaseRepository } from "./base.repository.js";
+import crypto from "crypto";
 
 export class TicketCommentRepository extends BaseRepository {
 	static async create(
@@ -20,27 +21,31 @@ export class TicketCommentRepository extends BaseRepository {
 		authorId: string,
 		body: string
 	): Promise<{ comment: TicketComment; updateId: string }> {
-		return await super.prisma.$transaction(async (tx) => {
-			const comment = await tx.ticketComment.create({
+		// Use non-interactive transaction (array form) to avoid 5s interactive timeout
+		// Generate comment id upfront so we can reference it in the update payload
+		const commentId = crypto.randomUUID();
+		const [comment, update] = await super.prisma.$transaction([
+			super.prisma.ticketComment.create({
 				data: {
+					id: commentId,
 					body,
 					ticket: { connect: { id: ticketId } },
 					author: { connect: { id: authorId } },
 				},
-			});
-			const update = await tx.ticketUpdate.create({
+			}),
+			super.prisma.ticketUpdate.create({
 				data: {
 					ticket: { connect: { id: ticketId } },
 					updatedBy: { connect: { id: authorId } },
 					type: "COMMENT" as any,
 					content: JSON.stringify({
-						commentId: comment.id,
+						commentId,
 						snippet: body.slice(0, 140),
 					}),
 				},
-			});
-			return { comment, updateId: update.id };
-		});
+			}),
+		]);
+		return { comment, updateId: update.id };
 	}
 
 	static async listByTicket(

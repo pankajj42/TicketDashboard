@@ -133,3 +133,11 @@ Learn more about the power of Turborepo:
 - [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
 - [Configuration Options](https://turborepo.com/docs/reference/configuration)
 - [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+
+## Troubleshooting: Intermittent API 404s
+
+- API prefix mismatch: Ensure frontend `API_CONFIG.PREFIX` matches backend route prefix (e.g., `/api`). A mismatch can lead to requests hitting non-existent paths.
+- Base URL/proxy issues: Confirm `API_CONFIG.BASE_URL` resolves to the backend during development. Mixed ports or http/https can yield 404s.
+- Token refresh race: Requests fired during access-token refresh can be aborted or redirected. The client retries transient failures, but a redirect to `/login` can make relative fetches 404. Prefer absolute API URLs and let the auth hook finish refresh.
+- Backend cold starts: After schema changes or restarts, initial requests may fail. Retry once; the client already uses basic backoff.
+- Missing routes: Verify Express routes exist (e.g., `/api/projects`) and are registered in the router.

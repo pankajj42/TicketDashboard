@@ -102,4 +102,16 @@ export class Realtime {
 	static notifyUser(userId: string, event: string, payload: any) {
 		this.io?.to(`user:${userId}`).emit(event, payload);
 	}
+
+	// Ensure all sockets for a given user join a project's room (cluster-safe)
+	static joinUserToProjectRoom(userId: string, projectId: string) {
+		const room = `project:${projectId}`;
+		this.io?.in(`user:${userId}`).socketsJoin(room);
+	}
+
+	// Ensure all sockets for a given user leave a project's room (cluster-safe)
+	static leaveUserFromProjectRoom(userId: string, projectId: string) {
+		const room = `project:${projectId}`;
+		this.io?.in(`user:${userId}`).socketsLeave(room);
+	}
 }

@@ -15,6 +15,7 @@ import { Realtime } from "./services/realtime.service.js";
 import CleanupService from "./services/cleanup.service.js";
 import { redis } from "./lib/redis.js";
 import { queue } from "./services/queue.service.js";
+import { AdminExpiryWatcher } from "./services/admin-expiry.service.js";
 
 const app = express();
 
@@ -30,7 +31,7 @@ app.use(
 		origin: config.isDevelopment ? "http://localhost:5173" : false,
 		credentials: true, // Allow cookies
 		methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-		allowedHeaders: ["Content-Type", "Authorization"],
+		allowedHeaders: ["Content-Type", "Authorization", "X-Admin-Token"],
 	})
 );
 
@@ -143,3 +144,5 @@ console.log(`🚀 Server running with realtime on port ${config.PORT}`);
 
 // Start cleanup service (runs every hour)
 CleanupService.start(60);
+// Start admin expiry watcher (server-push admin:revoked)
+AdminExpiryWatcher.start(5000);

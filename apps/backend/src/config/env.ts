@@ -24,9 +24,6 @@ const config = {
 	// Admin JWT Secrets (separate for admin tokens)
 	ADMIN_JWT_SECRET:
 		process.env.ADMIN_JWT_SECRET || "default_admin_jwt_secret",
-	ADMIN_JWT_REFRESH_SECRET:
-		process.env.ADMIN_JWT_REFRESH_SECRET ||
-		"default_admin_refresh_jwt_secret",
 
 	// Admin Password
 	ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || "admin123",

@@ -55,7 +55,6 @@ export default function SortableCard({
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<div
-							role="button"
 							aria-label="Drag ticket"
 							title="Drag"
 							className="inline-flex items-center cursor-grab select-none rounded px-1 py-0.5 hover:bg-gray-200/70 dark:hover:bg-gray-700"

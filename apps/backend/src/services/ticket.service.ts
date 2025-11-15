@@ -1,9 +1,11 @@
 import { TicketRepository } from "../repositories/ticket.repository.js";
 import { TicketUpdateRepository } from "../repositories/ticket-update.repository.js";
 import { ProjectRepository } from "../repositories/project.repository.js";
+import { ProjectService } from "./project.service.js";
 import { NotificationRepository } from "../repositories/notification.repository.js";
 import { redis } from "../lib/redis.js";
 import { Realtime } from "./realtime.service.js";
+import { UserRepository } from "../repositories/user.repository.js";
 import { queue } from "./queue.service.js";
 import { z } from "zod";
 import {
@@ -14,6 +16,15 @@ import {
 import { UpdateType } from "../generated/prisma/client.js";
 
 export class TicketService {
+	private static async getUserDisplayName(userId: string | null | undefined) {
+		if (!userId) return null;
+		try {
+			const u = await UserRepository.findById(userId);
+			return u?.username || u?.email || null;
+		} catch {
+			return null;
+		}
+	}
 	static async createTicket(
 		projectId: string,
 		actorId: string,
@@ -26,14 +37,24 @@ export class TicketService {
 			parsed.title,
 			parsed.description
 		);
-
+		// Auto-subscribe creator to the project (idempotent) and notify via realtime
+		try {
+			await ProjectService.subscribe(projectId, actorId);
+		} catch {}
+		const meta = await TicketRepository.findProjectMeta(ticket.id);
+		const projectName = meta?.projectName || "Project";
+		const ticketTitle = meta?.ticketTitle || ticket.title;
+		const actorName = (await this.getUserDisplayName(actorId)) || "someone";
 		await this.notifyProjectSubscribers(projectId, {
-			message: `New ticket in project: ${ticket.title}`,
+			message: `[${projectName}] Ticket created by ${actorName}: ${ticketTitle}`,
 			ticketUpdateId: lastUpdateId,
 		});
 
 		Realtime.broadcastToProject(projectId, "ticket:created", {
 			ticketId: ticket.id,
+			ticketTitle,
+			actorId,
+			actorName,
 		});
 
 		return ticket;
@@ -47,8 +68,14 @@ export class TicketService {
 		const parsed = UpdateTicketDetailsSchema.parse(input);
 		const ticket = await TicketRepository.findById(ticketId);
 		if (!ticket) throw new Error("TICKET_NOT_FOUND");
-		if (ticket.createdById !== actorId)
-			throw new Error("FORBIDDEN_NOT_CREATOR");
+		// Allow creator, current assignee, or any subscribed user to update
+		if (ticket.createdById !== actorId && ticket.assignedToId !== actorId) {
+			const subscribedIds =
+				await ProjectRepository.findSubscribedProjectIdsByUser(actorId);
+			if (!subscribedIds.includes(ticket.projectId)) {
+				throw new Error("FORBIDDEN_NOT_ALLOWED");
+			}
+		}
 
 		const { ticket: updated, lastUpdateId } =
 			await TicketRepository.updateDetailsWithAudit(
@@ -57,12 +84,20 @@ export class TicketService {
 				parsed
 			);
 
+		const meta = await TicketRepository.findProjectMeta(ticketId);
+		const projectName = meta?.projectName || "Project";
+		const ticketTitle = meta?.ticketTitle || updated.title;
+		const actorName = (await this.getUserDisplayName(actorId)) || "someone";
 		await this.notifyProjectSubscribers(updated.projectId, {
-			message: `Ticket updated: ${updated.title}`,
+			message: `[${projectName}] Ticket updated by ${actorName}: ${ticketTitle}`,
 			ticketUpdateId: lastUpdateId,
 		});
 		Realtime.broadcastToProject(updated.projectId, "ticket:updated", {
 			ticketId: updated.id,
+			ticketTitle: updated.title,
+			description: updated.description,
+			actorId,
+			actorName,
 		});
 		return updated;
 	}
@@ -90,13 +125,55 @@ export class TicketService {
 				assignedToId
 			);
 
+		const meta = await TicketRepository.findProjectMeta(ticketId);
+		const projectName = meta?.projectName || "Project";
+		const ticketTitle = meta?.ticketTitle || current.title;
+		const actorName = (await this.getUserDisplayName(actorId)) || "someone";
 		await this.notifyProjectSubscribers(updated.projectId, {
-			message: `Ticket status changed: ${current.title} → ${parsed.status}`,
+			message: `[${projectName}] Status changed by ${actorName} for ${ticketTitle}: ${current.status} → ${parsed.status}`,
 			ticketUpdateId: lastUpdateId,
 		});
+		// If assignment changed implicitly (auto-assign or cleared), send separate notification
+		if ((current.assignedToId || null) !== (updated.assignedToId || null)) {
+			if (updated.assignedToId) {
+				try {
+					await ProjectService.subscribe(
+						updated.projectId,
+						updated.assignedToId
+					);
+				} catch {}
+			}
+			const assigneeName = updated.assignedToId
+				? (await this.getUserDisplayName(updated.assignedToId)) ||
+					"user"
+				: null;
+			await this.notifyProjectSubscribers(updated.projectId, {
+				message: updated.assignedToId
+					? `[${projectName}] Assigned to ${assigneeName} by ${actorName}: ${ticketTitle}`
+					: `[${projectName}] Assignment cleared by ${actorName}: ${ticketTitle}`,
+				ticketUpdateId: lastUpdateId,
+			});
+			Realtime.broadcastToProject(
+				updated.projectId,
+				"ticket:assignment",
+				{
+					ticketId: updated.id,
+					assignedToId: updated.assignedToId,
+					assignedToName: assigneeName,
+					actorName,
+					actorId,
+					ticketTitle,
+				}
+			);
+		}
 		Realtime.broadcastToProject(updated.projectId, "ticket:status", {
 			ticketId: updated.id,
 			status: updated.status,
+			fromStatus: current.status,
+			toStatus: updated.status,
+			actorId,
+			actorName,
+			ticketTitle,
 		});
 		return updated;
 	}
@@ -155,13 +232,35 @@ export class TicketService {
 					"PROPOSED" as any,
 					null
 				);
+			const meta = await TicketRepository.findProjectMeta(ticketId);
+			const projectName = meta?.projectName || "Project";
+			const ticketTitle = meta?.ticketTitle || ticket.title;
+			const actorName =
+				(await this.getUserDisplayName(actorId)) || "someone";
 			await this.notifyProjectSubscribers(ticket.projectId, {
-				message: `Ticket moved to PROPOSED: ${ticket.title}`,
+				message: `[${projectName}] Moved to PROPOSED by ${actorName}: ${ticketTitle}`,
+				ticketUpdateId: lastUpdateId,
+			});
+			await this.notifyProjectSubscribers(ticket.projectId, {
+				message: `[${projectName}] Assignment cleared by ${actorName}: ${ticketTitle}`,
 				ticketUpdateId: lastUpdateId,
 			});
 			Realtime.broadcastToProject(ticket.projectId, "ticket:status", {
 				ticketId: ticket.id,
 				status: ticket.status,
+				fromStatus: current.status,
+				toStatus: ticket.status,
+				actorId,
+				actorName,
+				ticketTitle,
+			});
+			Realtime.broadcastToProject(ticket.projectId, "ticket:assignment", {
+				ticketId: ticket.id,
+				assignedToId: null,
+				assignedToName: null,
+				actorName,
+				actorId,
+				ticketTitle,
 			});
 			return ticket;
 		}
@@ -172,13 +271,34 @@ export class TicketService {
 				actorId,
 				parsed.userId ?? null
 			);
+		const meta = await TicketRepository.findProjectMeta(ticketId);
+		const projectName = meta?.projectName || "Project";
+		const ticketTitle = meta?.ticketTitle || ticket.title;
+		const actorName = (await this.getUserDisplayName(actorId)) || "someone";
+		const assigneeName = ticket.assignedToId
+			? (await this.getUserDisplayName(ticket.assignedToId)) || "user"
+			: null;
 		await this.notifyProjectSubscribers(ticket.projectId, {
-			message: `Ticket assignment updated: ${ticket.title}`,
+			message: ticket.assignedToId
+				? `[${projectName}] Assigned to ${assigneeName} by ${actorName}: ${ticketTitle}`
+				: `[${projectName}] Assignment cleared by ${actorName}: ${ticketTitle}`,
 			ticketUpdateId: lastUpdateId,
 		});
+		if (ticket.assignedToId) {
+			try {
+				await ProjectService.subscribe(
+					ticket.projectId,
+					ticket.assignedToId
+				);
+			} catch {}
+		}
 		Realtime.broadcastToProject(ticket.projectId, "ticket:assignment", {
 			ticketId: ticket.id,
 			assignedToId: ticket.assignedToId,
+			assignedToName: assigneeName,
+			actorName,
+			actorId,
+			ticketTitle,
 		});
 		return ticket;
 	}
@@ -210,20 +330,60 @@ export class TicketService {
 					newStatus: parsed.status as any,
 				}
 			);
+		const meta = await TicketRepository.findProjectMeta(ticketId);
+		const projectName = meta?.projectName || "Project";
+		const ticketTitle = meta?.ticketTitle || ticket.title;
+		const actorName = (await this.getUserDisplayName(actorId)) || "someone";
 		await this.notifyProjectSubscribers(ticket.projectId, {
-			message: `Ticket updated: ${ticket.title}`,
+			message: `[${projectName}] Ticket updated by ${actorName}: ${ticketTitle}`,
 			ticketUpdateId: lastUpdateId,
 		});
-		if (typeof parsed.status !== "undefined") {
+		if (
+			typeof parsed.status !== "undefined" &&
+			parsed.status !== current.status
+		) {
+			await this.notifyProjectSubscribers(ticket.projectId, {
+				message: `[${projectName}] Status changed by ${actorName} for ${ticketTitle}: ${current.status} → ${parsed.status}`,
+				ticketUpdateId: lastUpdateId,
+			});
 			Realtime.broadcastToProject(ticket.projectId, "ticket:status", {
 				ticketId: ticket.id,
 				status: ticket.status,
+				fromStatus: current.status,
+				toStatus: ticket.status,
+				actorId,
+				actorName,
+				ticketTitle,
 			});
 		}
-		if (typeof parsed.userId !== "undefined") {
+		if (
+			typeof parsed.userId !== "undefined" &&
+			(current.assignedToId || null) !== (ticket.assignedToId || null)
+		) {
+			const assigneeName = ticket.assignedToId
+				? (await this.getUserDisplayName(ticket.assignedToId)) || "user"
+				: null;
+			await this.notifyProjectSubscribers(ticket.projectId, {
+				message: ticket.assignedToId
+					? `[${projectName}] Assigned to ${assigneeName} by ${actorName}: ${ticketTitle}`
+					: `[${projectName}] Assignment cleared by ${actorName}: ${ticketTitle}`,
+				ticketUpdateId: lastUpdateId,
+			});
+			if (ticket.assignedToId) {
+				try {
+					await ProjectService.subscribe(
+						ticket.projectId,
+						ticket.assignedToId
+					);
+				} catch {}
+			}
 			Realtime.broadcastToProject(ticket.projectId, "ticket:assignment", {
 				ticketId: ticket.id,
 				assignedToId: ticket.assignedToId,
+				assignedToName: assigneeName,
+				actorName,
+				actorId,
+				ticketTitle,
 			});
 		}
 		return ticket;

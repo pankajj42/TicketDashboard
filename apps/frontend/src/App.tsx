@@ -8,10 +8,13 @@ import DashboardPage from "./routes/DashboardPage";
 import LoginPage from "./routes/LoginPage";
 import { Toaster } from "sonner";
 import { useAuthBroadcastSync } from "@/hooks/useAuth";
+import { useAdminRealtime } from "@/hooks/useAdminRealtime";
 
 function App() {
 	// Initialize cross-tab auth/admin sync once at app root
 	useAuthBroadcastSync();
+	// Listen for server-side admin revoke events
+	useAdminRealtime();
 	return (
 		<ErrorBoundary>
 			<ThemeProvider

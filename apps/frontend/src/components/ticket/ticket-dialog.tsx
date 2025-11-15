@@ -5,19 +5,29 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { useAccessToken, useIsAdminElevated } from "@/store/auth.store";
+import {
+	useAccessToken,
+	useIsAdminElevated,
+	useAdminToken,
+	useClearAdminElevation,
+} from "@/store/auth.store";
+import { ApiError } from "@/services/http";
+import { toast } from "sonner";
 import { httpClient } from "@/services/http";
 import { CommentApiService } from "@/services/comment.api";
 import { UserApiService } from "@/services/user.api";
 import { TicketApiService } from "@/services/ticket.api";
 import { TextSkeleton } from "../loading-skeletons";
 import { Loader2 } from "lucide-react";
+import { getSocket } from "@/lib/realtime";
 
 type Props = { ticketId: string | null; onClose: () => void };
 
 export default function TicketDialog({ ticketId, onClose }: Props) {
 	const token = useAccessToken();
 	const isAdmin = useIsAdminElevated();
+	const adminToken = useAdminToken();
+	const clearAdminElevation = useClearAdminElevation();
 	const [ticket, setTicket] = useState<any>(null);
 	const [comments, setComments] = useState<any[]>([]);
 	const [updates, setUpdates] = useState<any[]>([]);
@@ -25,6 +35,10 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 	const [loadingTicket, setLoadingTicket] = useState(false);
 	const [loadingComments, setLoadingComments] = useState(false);
 	const [submittingComment, setSubmittingComment] = useState(false);
+	const [isEditing, setIsEditing] = useState(false);
+	const [savingEdits, setSavingEdits] = useState(false);
+	const [editTitle, setEditTitle] = useState("");
+	const [editDescription, setEditDescription] = useState("");
 	const [activeTab, setActiveTab] = useState<
 		"details" | "comments" | "updates"
 	>("details");
@@ -33,6 +47,7 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 	>([]);
 	const [loadingUsers, setLoadingUsers] = useState(false);
 	const [assigning, setAssigning] = useState(false);
+	const [usersError, setUsersError] = useState<string | null>(null);
 	const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>("");
 	const commentsRef = useRef<HTMLDivElement | null>(null);
 	const detailsTabRef = useRef<HTMLButtonElement | null>(null);
@@ -71,6 +86,7 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 		const currentIndex = visibleTabs.findIndex((t) => t.key === activeTab);
 		if (e.key === "ArrowRight") {
 			e.preventDefault();
+			focusTabByIndex((currentIndex + 1) % visibleTabs.length);
 		} else if (e.key === "ArrowLeft") {
 			e.preventDefault();
 			focusTabByIndex(
@@ -95,6 +111,8 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 					{ Authorization: `Bearer ${token}` }
 				);
 				setTicket(t.ticket);
+				setEditTitle(t.ticket?.title || "");
+				setEditDescription(t.ticket?.description || "");
 				setSelectedAssigneeId(t.ticket?.assignedTo?.id || "");
 			} finally {
 				setLoadingTicket(false);
@@ -104,11 +122,21 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 				const c = await CommentApiService.list(ticketId, token);
 				setComments(c.comments ?? []);
 				if (isAdmin) {
-					const u = await httpClient.get<{ updates: any[] }>(
-						`/tickets/${ticketId}/updates`,
-						{ Authorization: `Bearer ${token}` }
-					);
-					setUpdates(u.updates);
+					try {
+						const u = await httpClient.get<{ updates: any[] }>(
+							`/tickets/${ticketId}/updates`,
+							{ Authorization: `Bearer ${token}` }
+						);
+						setUpdates(u.updates);
+					} catch (e: any) {
+						// Silently ignore 404 for missing updates endpoint; treat as no updates
+						if (e?.status !== 404) {
+							toast.error(
+								"Failed to load ticket updates. Some audit details may be missing."
+							);
+						}
+						setUpdates([]);
+					}
 				}
 			} finally {
 				setLoadingComments(false);
@@ -117,32 +145,99 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 		setActiveTab("details");
 	}, [ticketId, token, isAdmin]);
 
-	// Load users for admin assignment when dialog opens
+	// Realtime updates for comments and ticket edits
+	useEffect(() => {
+		const socket = getSocket();
+		if (!socket || !ticketId) return;
+		function onComment(evt: any) {
+			if (evt?.ticketId !== ticketId) return;
+			setComments((prev) => [
+				...prev,
+				{
+					id: evt.commentId || Math.random().toString(36).slice(2),
+					body: evt.body,
+					createdAt: evt.createdAt || new Date().toISOString(),
+					author: { username: evt.actorName || "Someone" },
+				},
+			]);
+		}
+		function onUpdated(evt: any) {
+			if (evt?.ticketId !== ticketId) return;
+			setTicket((prev: any) =>
+				prev
+					? {
+							...prev,
+							title:
+								typeof evt.ticketTitle === "string"
+									? evt.ticketTitle
+									: prev.title,
+							description:
+								typeof evt.description === "string"
+									? evt.description
+									: prev.description,
+						}
+					: prev
+			);
+			if (typeof evt.ticketTitle === "string")
+				setEditTitle(evt.ticketTitle);
+			if (typeof evt.description === "string")
+				setEditDescription(evt.description);
+		}
+		socket.on("ticket:comment", onComment);
+		socket.on("ticket:updated", onUpdated);
+		return () => {
+			socket.off("ticket:comment", onComment);
+			socket.off("ticket:updated", onUpdated);
+		};
+	}, [ticketId]);
+
 	useEffect(() => {
 		if (!isAdmin || !token || !ticketId) return;
 		setLoadingUsers(true);
-		UserApiService.list(token)
-			.then((res) => setUsers(res.users || []))
+		setUsersError(null);
+		UserApiService.list(token, adminToken || undefined)
+			.then((res) => {
+				setUsers(res.users || []);
+				if ((res.users || []).length === 0 && !adminToken) {
+					setUsersError(
+						"No users available. Admin elevation may be required."
+					);
+				}
+			})
+			.catch((err: any) => {
+				if (err && typeof err === "object" && "status" in err) {
+					const status = (err as ApiError).status;
+					if (status === 401 && adminToken) {
+						clearAdminElevation();
+						toast.error(
+							"Admin elevation expired. Please re-elevate to load users."
+						);
+						return;
+					}
+				}
+				setUsersError(
+					err?.message || "Failed to load users. Try again later."
+				);
+				toast.error(
+					err?.message || "Failed to load users. Try again later."
+				);
+			})
 			.finally(() => setLoadingUsers(false));
-	}, [isAdmin, token, ticketId]);
+	}, [isAdmin, token, ticketId, adminToken]);
 
-	// Auto-scroll comments to bottom whenever comments change or tab opens
 	useEffect(() => {
 		if (activeTab !== "comments") return;
 		const el = commentsRef.current;
 		if (!el) return;
-		// Small timeout to ensure DOM updates
 		const id = window.setTimeout(() => {
 			el.scrollTop = el.scrollHeight;
-		}, 50);
+		}, 40);
 		return () => window.clearTimeout(id);
 	}, [activeTab, comments]);
 
 	const orderedComments = useMemo(() => {
 		if (!Array.isArray(comments)) return [] as any[];
-		if (comments.length === 0) return comments;
-		// If createdAt exists, sort ascending so latest appears at the end
-		if (comments[0] && "createdAt" in comments[0]) {
+		if (comments.length && comments[0] && comments[0].createdAt) {
 			return [...comments].sort(
 				(a: any, b: any) =>
 					new Date(a.createdAt).getTime() -
@@ -156,26 +251,26 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 		const source =
 			(name && name.trim()) || (email && email.split("@")[0]) || "?";
 		const parts = source.split(/\s+/).filter(Boolean);
-		if (parts.length === 1) {
-			return parts[0].slice(0, 2).toUpperCase();
-		}
-		return (parts[0][0] + parts[1][0]).toUpperCase();
+		if (!parts.length) return "?";
+		if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 	}
 
-	function formatDateTime(value?: string) {
-		if (!value) return "";
+	function formatDateTime(v?: string) {
+		if (!v) return "";
 		try {
-			return new Date(value).toLocaleString();
+			return new Date(v).toLocaleString();
 		} catch {
-			return String(value);
+			return String(v);
 		}
 	}
 
 	function safeParseJSON<T = any>(raw: any): T | undefined {
 		if (!raw) return undefined;
 		try {
-			if (typeof raw === "string") return JSON.parse(raw) as T;
-			return raw as T;
+			return typeof raw === "string"
+				? (JSON.parse(raw) as T)
+				: (raw as T);
 		} catch {
 			return undefined;
 		}
@@ -200,67 +295,30 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 				<DialogHeader>
 					<DialogTitle>{ticket?.title || "Ticket"}</DialogTitle>
 				</DialogHeader>
-				{/* Simple tabs: Details | Comments | Updates (admin only) */}
 				<div className="space-y-4">
 					<div
 						role="tablist"
-						aria-label="Ticket dialog sections"
+						aria-label="Ticket sections"
 						onKeyDown={onTabListKeyDown}
 						className="flex items-center gap-2 border-b pb-2"
 					>
-						<button
-							ref={detailsTabRef}
-							role="tab"
-							id="tab-details"
-							aria-controls="panel-details"
-							aria-selected={activeTab === "details"}
-							tabIndex={activeTab === "details" ? 0 : -1}
-							className={`px-2 py-1 rounded-md text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:focus-visible:ring-gray-600 ${
-								activeTab === "details"
-									? "bg-gray-200 dark:bg-gray-700"
-									: "hover:bg-gray-100 dark:hover:bg-gray-800"
-							}`}
-							onClick={() => setActiveTab("details")}
-						>
-							Details
-						</button>
-						<button
-							ref={commentsTabRef}
-							role="tab"
-							id="tab-comments"
-							aria-controls="panel-comments"
-							aria-selected={activeTab === "comments"}
-							tabIndex={activeTab === "comments" ? 0 : -1}
-							className={`px-2 py-1 rounded-md text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:focus-visible:ring-gray-600 ${
-								activeTab === "comments"
-									? "bg-gray-200 dark:bg-gray-700"
-									: "hover:bg-gray-100 dark:hover:bg-gray-800"
-							}`}
-							onClick={() => setActiveTab("comments")}
-						>
-							Comments
-						</button>
-						{isAdmin && (
+						{visibleTabs.map((t) => (
 							<button
-								ref={updatesTabRef}
+								key={t.key}
+								ref={t.ref}
 								role="tab"
-								id="tab-updates"
-								aria-controls="panel-updates"
-								aria-selected={activeTab === "updates"}
-								tabIndex={activeTab === "updates" ? 0 : -1}
-								className={`px-2 py-1 rounded-md text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:focus-visible:ring-gray-600 ${
-									activeTab === "updates"
-										? "bg-gray-200 dark:bg-gray-700"
-										: "hover:bg-gray-100 dark:hover:bg-gray-800"
-								}`}
-								onClick={() => setActiveTab("updates")}
+								id={`tab-${t.key}`}
+								aria-controls={`panel-${t.key}`}
+								aria-selected={activeTab === t.key}
+								tabIndex={activeTab === t.key ? 0 : -1}
+								className={`px-2 py-1 rounded-md text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:focus-visible:ring-gray-600 ${activeTab === t.key ? "bg-gray-200 dark:bg-gray-700" : "hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+								onClick={() => setActiveTab(t.key)}
 							>
-								Updates
+								{t.label}
 							</button>
-						)}
+						))}
 					</div>
 
-					{/* Details tab */}
 					{activeTab === "details" && (
 						<div
 							id="panel-details"
@@ -275,8 +333,152 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 								</>
 							) : (
 								<>
-									<div className="text-sm text-gray-700 dark:text-gray-300">
-										{ticket?.description}
+									<div className="flex items-start justify-between gap-3">
+										<div className="flex-1">
+											{!isEditing ? (
+												<>
+													<div className="text-base font-medium mb-1">
+														{ticket?.title}
+													</div>
+													<div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+														{ticket?.description}
+													</div>
+												</>
+											) : (
+												<div className="space-y-2">
+													<label
+														htmlFor="edit-title"
+														className="sr-only"
+													>
+														Title
+													</label>
+													<input
+														id="edit-title"
+														className="w-full border rounded px-2 py-1"
+														value={editTitle}
+														onChange={(e) =>
+															setEditTitle(
+																e.target.value
+															)
+														}
+														placeholder="Title"
+														disabled={savingEdits}
+													/>
+													<label
+														htmlFor="edit-description"
+														className="sr-only"
+													>
+														Description
+													</label>
+													<textarea
+														id="edit-description"
+														className="w-full border rounded px-2 py-1 min-h-24"
+														value={editDescription}
+														onChange={(e) =>
+															setEditDescription(
+																e.target.value
+															)
+														}
+														placeholder="Description"
+														disabled={savingEdits}
+													/>
+												</div>
+											)}
+										</div>
+										<div className="shrink-0">
+											{!isEditing ? (
+												<button
+													className="px-3 py-1 rounded bg-gray-700 text-white text-sm disabled:opacity-60"
+													onClick={() =>
+														setIsEditing(true)
+													}
+												>
+													Edit
+												</button>
+											) : (
+												<div className="flex items-center gap-2">
+													<button
+														className="px-3 py-1 rounded bg-gray-700 text-white text-sm disabled:opacity-60"
+														disabled={savingEdits}
+														onClick={async () => {
+															if (
+																!ticketId ||
+																!token
+															)
+																return;
+															try {
+																setSavingEdits(
+																	true
+																);
+																await TicketApiService.updateDetails(
+																	ticketId,
+																	{
+																		title: editTitle,
+																		description:
+																			editDescription,
+																	},
+																	token
+																);
+																setTicket(
+																	(
+																		prev: any
+																	) =>
+																		prev
+																			? {
+																					...prev,
+																					title: editTitle,
+																					description:
+																						editDescription,
+																				}
+																			: prev
+																);
+																setIsEditing(
+																	false
+																);
+																toast.success(
+																	"Ticket details updated"
+																);
+															} catch (e: any) {
+																toast.error(
+																	e?.message ||
+																		"Failed to update ticket"
+																);
+															} finally {
+																setSavingEdits(
+																	false
+																);
+															}
+														}}
+													>
+														{savingEdits ? (
+															<span className="inline-flex items-center">
+																<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+																Saving...
+															</span>
+														) : (
+															"Save"
+														)}
+													</button>
+													<button
+														className="px-3 py-1 rounded border text-sm disabled:opacity-60"
+														disabled={savingEdits}
+														onClick={() => {
+															setIsEditing(false);
+															setEditTitle(
+																ticket?.title ||
+																	""
+															);
+															setEditDescription(
+																ticket?.description ||
+																	""
+															);
+														}}
+													>
+														Cancel
+													</button>
+												</div>
+											)}
+										</div>
 									</div>
 									<div className="text-xs text-gray-500">
 										Created by:{" "}
@@ -300,7 +502,9 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 													}
 													disabled={
 														assigning ||
-														loadingUsers
+														loadingUsers ||
+														ticket?.status ===
+															"PROPOSED"
 													}
 												>
 													<option value="">
@@ -318,7 +522,11 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 												</select>
 												<button
 													className="px-3 py-1 rounded bg-gray-700 text-white text-sm disabled:opacity-60"
-													disabled={assigning}
+													disabled={
+														assigning ||
+														ticket?.status ===
+															"PROPOSED"
+													}
 													onClick={async () => {
 														if (!ticketId || !token)
 															return;
@@ -379,11 +587,30 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 													)}
 												</button>
 											</div>
+											{ticket?.status === "PROPOSED" && (
+												<div className="text-xs text-red-500 mt-1">
+													Cannot assign while status
+													is PROPOSED. Change status
+													first.
+												</div>
+											)}
 											{loadingUsers && (
 												<div className="text-xs text-gray-500 mt-1">
 													Loading users...
 												</div>
 											)}
+											{!loadingUsers && usersError && (
+												<div className="text-xs text-red-500 mt-1">
+													{usersError}
+												</div>
+											)}
+											{!loadingUsers &&
+												!usersError &&
+												users.length === 0 && (
+													<div className="text-xs text-gray-500 mt-1">
+														No users found.
+													</div>
+												)}
 										</div>
 									)}
 								</>
@@ -391,7 +618,6 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 						</div>
 					)}
 
-					{/* Comments tab */}
 					{activeTab === "comments" && (
 						<div
 							id="panel-comments"
@@ -470,7 +696,6 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 						</div>
 					)}
 
-					{/* Updates tab (admin only) */}
 					{isAdmin && activeTab === "updates" && (
 						<div
 							id="panel-updates"
@@ -515,10 +740,9 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 												const keys = content
 													? Object.keys(content)
 													: [];
-												if (keys.length === 0)
-													summary = "Details updated";
-												else
-													summary = `Updated: ${keys.join(", ")}`;
+												summary = keys.length
+													? `Updated: ${keys.join(", ")}`
+													: "Details updated";
 												break;
 											}
 											default: {
@@ -527,7 +751,6 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 												);
 											}
 										}
-
 										return (
 											<div
 												key={u.id}
