@@ -20,6 +20,7 @@ import { AdminExpiryWatcher } from "./services/admin-expiry.service.js";
 const app = express();
 
 // Security middleware
+app.set("trust proxy", 1); // needed for secure cookies behind proxy/CDN
 app.use(
 	helmet({
 		contentSecurityPolicy: config.isDevelopment ? false : undefined,
@@ -28,8 +29,23 @@ app.use(
 
 app.use(
 	cors({
-		origin: config.isDevelopment ? "http://localhost:5173" : false,
-		credentials: true, // Allow cookies
+		origin: (origin, cb) => {
+			// allow non-browser requests (no Origin header)
+			if (!origin) return cb(null, true);
+			// allow if explicitly listed
+			if (
+				Array.isArray(config.ALLOWED_ORIGINS) &&
+				config.ALLOWED_ORIGINS.includes(origin)
+			) {
+				return cb(null, true);
+			}
+			// allow localhost during development for convenience
+			if (config.isDevelopment && origin.startsWith("http://localhost")) {
+				return cb(null, true);
+			}
+			return cb(new Error("Not allowed by CORS"));
+		},
+		credentials: true,
 		methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 		allowedHeaders: ["Content-Type", "Authorization", "X-Admin-Token"],
 	})

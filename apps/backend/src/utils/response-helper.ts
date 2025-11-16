@@ -7,7 +7,12 @@ export class ResponseHelper {
 	 */
 	static setRefreshTokenCookie(res: Response, refreshToken: string): void {
 		const sameSite = config.COOKIE_SAME_SITE || "strict";
-		const secure = sameSite === "none" ? true : !config.isDevelopment;
+		const secure =
+			typeof config.COOKIE_SECURE === "boolean"
+				? config.COOKIE_SECURE
+				: sameSite === "none"
+					? true
+					: !config.isDevelopment;
 		res.cookie("refreshToken", refreshToken, {
 			httpOnly: true,
 			secure,
@@ -23,7 +28,12 @@ export class ResponseHelper {
 	 */
 	static clearRefreshTokenCookie(res: Response): void {
 		const sameSite = config.COOKIE_SAME_SITE || "strict";
-		const secure = sameSite === "none" ? true : !config.isDevelopment;
+		const secure =
+			typeof config.COOKIE_SECURE === "boolean"
+				? config.COOKIE_SECURE
+				: sameSite === "none"
+					? true
+					: !config.isDevelopment;
 		res.clearCookie("refreshToken", {
 			httpOnly: true,
 			secure,

@@ -5,6 +5,7 @@ import { redis } from "../lib/redis.js";
 import { JwtService } from "./jwt.service.js";
 import { SessionService } from "./session.service.js";
 import { ProjectRepository } from "../repositories/project.repository.js";
+import config from "../config/env.js";
 
 type AuthedSocket = import("socket.io").Socket & { userId?: string };
 
@@ -18,9 +19,11 @@ export class Realtime {
 		const io = new Server(httpServer, {
 			cors: {
 				origin:
-					process.env.NODE_ENV === "development"
-						? "http://localhost:5173"
-						: false,
+					config.ALLOWED_ORIGINS && config.ALLOWED_ORIGINS.length > 0
+						? config.ALLOWED_ORIGINS
+						: config.isDevelopment
+							? "http://localhost:5173"
+							: [],
 				credentials: true,
 			},
 		});

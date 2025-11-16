@@ -9,12 +9,24 @@ import {
 
 dotenv.config();
 
+const NODE_ENV = process.env.NODE_ENV || "development";
+const rawOrigins = process.env.ALLOWED_ORIGINS || process.env.CLIENT_URL || "";
+const ALLOWED_ORIGINS = rawOrigins
+	.split(",")
+	.map((s) => s.trim())
+	.filter(Boolean);
+const COOKIE_SECURE =
+	(process.env.COOKIE_SECURE ??
+		(NODE_ENV === "production" ? "true" : "false")) === "true";
+
 const config = {
 	DATABASE_URL:
 		process.env.DATABASE_URL ||
 		"postgresql://user:password@localhost:5432/mydb",
 
 	PORT: process.env.PORT || 3000,
+
+	NODE_ENV,
 
 	// JWT Secrets
 	JWT_SECRET: process.env.JWT_SECRET || "default_jwt_secret",
@@ -41,6 +53,11 @@ const config = {
 	SMTP_PORT: parseInt(process.env.SMTP_PORT || "587"),
 	FROM_EMAIL: process.env.FROM_EMAIL || "<sender@email.com>",
 
+	// Frontend/Origins
+	CLIENT_URL: process.env.CLIENT_URL,
+	ALLOWED_ORIGINS,
+	COOKIE_SECURE,
+
 	// Authentication Configuration (from shared constants)
 	OTP_LENGTH: Number(OTP_CONFIG.LENGTH),
 	OTP_EXPIRY_MINUTES: Number(OTP_CONFIG.EXPIRY_MINUTES),
@@ -64,7 +81,7 @@ const config = {
 	// API Configuration
 	REQUEST_TIMEOUT_MS: Number(API_CONFIG.TIMEOUT_MS),
 
-	isDevelopment: (process.env.NODE_ENV || "development") === "development",
+	isDevelopment: NODE_ENV === "development",
 	sendOutMails: (process.env.SEND_OUT_MAILS || "true") === "true",
 
 	// Cookie settings
