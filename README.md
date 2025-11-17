@@ -1,143 +1,169 @@
-# Turborepo starter
+# TicketDashboard — Monorepo
 
-This Turborepo starter is maintained by the Turborepo core team.
+End-to-end ticketing board with projects, Kanban, realtime updates, notifications, and passwordless auth. Monorepo managed with Turborepo.
 
-## Using this example
+## Tech Stack
 
-Run the following command:
+- Backend: Node.js, Express 5, TypeScript, Prisma, PostgreSQL, BullMQ, ioredis, Socket.IO
+- Frontend: React 19, Vite, React Router, Zustand, dnd-kit, Tailwind, Sonner
+- Infra: Redis (presence, rate limits, queues), SMTP (SendGrid), Render for hosting
+- Shared: Types, schemas, constants across apps via `@repo/shared`
 
-```sh
-npx create-turbo@latest
+## Architecture
+
+```mermaid
+classDiagram
+	class User {
+		+id: UUID
+		+email: string
+		+username: string
+		+adminElevatedSessionId?: string
+		+adminElevatedUntil?: Date
+	}
+	class Project {
+		+id: UUID
+		+name: string
+		+description?: string
+	}
+	class Ticket {
+		+id: UUID
+		+title: string
+		+description: string
+		+status: TicketStatus
+	}
+	class TicketUpdate {
+		+id: UUID
+		+type: UpdateType
+		+content: JSON-string
+	}
+	class TicketComment {
+		+id: UUID
+		+body: string
+	}
+	class Notification {
+		+id: UUID
+		+message: string
+		+read: boolean
+	}
+	class RefreshToken {
+		+id: UUID
+		+token: string
+		+sessionId: string
+		+expiresAt: Date
+	}
+	class AdminElevation {
+		+id: UUID
+		+sessionId: string
+		+jti: string
+		+expiresAt: Date
+	}
+	User "1" --> "*" RefreshToken
+	User "1" --> "*" Ticket : createdTickets
+	User "1" --> "*" Ticket : assignedTickets
+	User "1" --> "*" TicketUpdate
+	User "1" --> "*" TicketComment
+	User "1" --> "*" Notification : recipient
+	User "1" --> "*" AdminElevation
+	Project "1" --> "*" Ticket
+	Project "*" --> "*" User : subscribers
+	Ticket "1" --> "*" TicketUpdate
+	Ticket "1" --> "*" TicketComment
+	TicketUpdate "1" --> "*" Notification
 ```
 
-## What's inside?
+![alt text](apps/backend/ERD.svg)
 
-This Turborepo includes the following packages/apps:
+Key flows:
 
-### Apps and Packages
+- Passwordless login → OTP email → access JWT (short) + refresh cookie (long)
+- Multi-device sessions persisted in DB; access JWT validated + session checked
+- Realtime via Socket.IO namespaces/rooms: `user:{id}`, `project:{id}`
+- Notifications: live to online users, queued email for offline users
+- Admin elevation: short-lived admin JWT allowlisted in Redis, single-session lock
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+## Monorepo Layout
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+- `apps/backend` — API, sockets, queues, Prisma
+- `apps/frontend` — SPA with Kanban board and realtime UX
+- `packages/shared` — constants, schemas, types used by both
 
-### Utilities
+## Local Development
 
-This Turborepo has some additional tools already setup for you:
+Prerequisites: Node 18+, PostgreSQL, Redis
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+1. Install deps
 
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+```powershell
+npm ci
 ```
 
-You can build a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+2. Configure environment
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+- Backend: copy env (see `apps/backend/README.md` for details)
+- Frontend: set `VITE_API_URL` to your backend URL (e.g., http://localhost:3000)
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
+3. Database and Prisma
 
-### Develop
-
-To develop all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
+```powershell
+cd apps/backend ; npx prisma migrate dev ; npx prisma generate ; cd ../..
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+4. Start dev servers (in two terminals)
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+```powershell
+npm run dev --workspace apps/backend
+npm run dev --workspace apps/frontend
 ```
 
-### Remote Caching
+Frontend runs on `http://localhost:5173`, backend on `http://localhost:3000` by default.
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+## Production Deployment (Render)
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+Backend service:
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+- Build command:
+  `npm ci --include=dev ; npx prisma generate --schema=apps/backend/prisma/schema.prisma; npx turbo run build --filter=./apps/backend`
+- Start command:
+  `npx prisma migrate deploy --schema=apps/backend/prisma/schema.prisma; npm run start -w apps/backend`
+- Required env (examples):
+    - `NODE_ENV=production`
+    - `PORT=3000`
+    - `DATABASE_URL=...`
+    - `REDIS_URL=...`
+    - `ALLOWED_ORIGINS=https://your-frontend-domain,http://localhost:5173`
+    - `COOKIE_SAME_SITE=none` and `COOKIE_SECURE=true`
+    - SMTP creds (see backend README)
 
-```
-cd my-turborepo
+Frontend static site:
 
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
+- Build: `npm run build -w apps/frontend`
+- Env: `VITE_API_URL=https://your-backend-domain`
+- SPA rewrite: rewrite all paths `/*` → `/index.html` (no redirect) so deep links like `/login` work.
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
+## System Design Highlights
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+- Short-lived access JWT + long-lived refresh cookie for strong security and smooth UX
+- Sessions in DB enable multi-device login, device management, audit, and server-side invalidation
+- Redis used for:
+    - Rate limiting keys `rl:*`
+    - Presence `presence:users`, `presence:user:{id}:count`
+    - Admin allowlist `admin:jti:{jti}` and user pointers `user:{id}:admin_elevation`
+    - Admin expiry tracking `zset admin:expirations`
+- BullMQ queues for email (OTP / notifications) with priorities and retries
+- Socket.IO with Redis adapter to enable horizontal scalability across instances
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+## Where to Read More
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
+- Backend API, models, CORS, sessions, admin elevation, realtime, queues: `apps/backend/README.md`
+- Frontend architecture, state, components, realtime, flows: `apps/frontend/README.md`
+- Shared constants, schemas, error codes: `packages/shared/README.md`
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
+## Future Improvements
 
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.com/docs/reference/configuration)
-- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
-
-## Troubleshooting: Intermittent API 404s
-
-- API prefix mismatch: Ensure frontend `API_CONFIG.PREFIX` matches backend route prefix (e.g., `/api`). A mismatch can lead to requests hitting non-existent paths.
-- Base URL/proxy issues: Confirm `API_CONFIG.BASE_URL` resolves to the backend during development. Mixed ports or http/https can yield 404s.
-- Token refresh race: Requests fired during access-token refresh can be aborted or redirected. The client retries transient failures, but a redirect to `/login` can make relative fetches 404. Prefer absolute API URLs and let the auth hook finish refresh.
-- Backend cold starts: After schema changes or restarts, initial requests may fail. Retry once; the client already uses basic backoff.
-- Missing routes: Verify Express routes exist (e.g., `/api/projects`) and are registered in the router.
+- Pagination and filters for tickets and updates
+- Full-text search and tag system
+- Role-based access control beyond temporary elevation
+- Webhook integrations for CI/CD on `DEPLOYED` tickets
+- Structured logging and metrics (OpenTelemetry)
+- E2E tests and contract tests between frontend/backend
+- Separate Teams, each user being part to certain teams only, within separate organizations

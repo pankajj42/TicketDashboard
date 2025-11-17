@@ -1,642 +1,202 @@
-# Ticket Dashboard Backend API
+# TicketDashboard Backend API
 
-## Overview
-
-This is the backend API for the Ticket Dashboard application, built with Express.js, TypeScript, Prisma, and PostgreSQL. It provides a complete authentication system with email-based OTP login, JWT tokens, and multi-device session management.
-
-## Features
-
-- 🔐 **Email + OTP Authentication** - Passwordless login system
-- 🎫 **JWT Tokens** - Access tokens (1 min) + Refresh tokens (7 days)
-- 📱 **Multi-Device Support** - Users can login on multiple devices
-- 🍪 **HttpOnly Cookies** - Secure refresh token storage
-- 🚪 **Flexible Logout** - Logout from current device or all devices
-- 🧹 **Auto Cleanup** - Expired tokens are automatically cleaned up
-- 🛡️ **Rate Limiting** - Protection against brute force attacks
-- 📊 **Device Management** - View and manage active sessions
+Production-grade Express + TypeScript API for projects, tickets, comments, notifications, realtime updates, and passwordless auth with multi-device sessions and temporary admin elevation.
 
 ## Quick Start
 
-```bash
-# Install dependencies
-npm install
+```powershell
+# Install deps at repo root
+npm ci
 
-# Set up environment variables
-cp .env.example .env
+# Generate Prisma client
+npx prisma generate --schema=apps/backend/prisma/schema.prisma
 
-# Run database migrations
-npx prisma migrate dev
+# Apply migrations (local dev)
+npx prisma migrate dev --schema=apps/backend/prisma/schema.prisma
 
-# Start development server
-npm run dev
+# Start the API (dev)
+npm run dev --workspace apps/backend
 ```
 
-## Environment Variables
+Environment (example):
 
 ```env
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/ticketdb"
+PORT=3000
+NODE_ENV=development
 
-# JWT Secrets
-JWT_SECRET="your-secret-key-for-access-tokens"
-JWT_REFRESH_SECRET="your-secret-key-for-refresh-tokens"
+DATABASE_URL=postgresql://user:password@localhost:5432/ticketdash
+REDIS_URL=redis://localhost:6379
 
-# Email Configuration
-SMTP_HOST="smtp.gmail.com"
+JWT_SECRET=dev_access_secret
+JWT_REFRESH_SECRET=dev_refresh_secret
+ADMIN_JWT_SECRET=dev_admin_secret
+ADMIN_PASSWORD=admin123
+
+SEND_OUT_MAILS=false
+SMTP_HOST=smtp.sendgrid.net
 SMTP_PORT=587
-SMTP_USER="your-email@gmail.com"
-SMTP_PASS="your-app-password"
-FROM_EMAIL="noreply@ticketdash.com"
+SMTP_USER=apikey
+SMTP_PASS=***
+FROM_EMAIL="TicketDash <noreply@yourdomain.com>"
 
-# Server
-PORT=3001
-NODE_ENV="development"
+ALLOWED_ORIGINS=http://localhost:5173
+COOKIE_SAME_SITE=none
+COOKIE_SECURE=false
 ```
 
-## Authentication System
+Note: In production set `COOKIE_SECURE=true`, keep `SAME_SITE=none`, and configure `ALLOWED_ORIGINS` to your frontend origin(s) without quotes or trailing slashes.
 
-### How It Works
+## System Design
 
-1. **Login Flow:**
+- Access JWT (short-lived) + Refresh JWT (long-lived cookie) pattern
+- Sessions persisted in Postgres (`RefreshToken`) with device metadata; access JWT validated and tied to an active session
+- Redis for rate limits, presence, admin allowlist, and admin expiry tracking; enables horizontal scaling and Socket.IO cluster adapter
+- Queueing via BullMQ for OTP and notification emails with separate priorities and retries
+- Realtime via Socket.IO rooms:
+    - `user:{userId}` for per-user events (notifications, admin revoke)
+    - `project:{projectId}` for ticket events within a project
 
-    ```
-    User → Email → OTP → Access Token + Refresh Token Cookie
-    ```
+## Security & CORS
 
-2. **Token Lifecycle:**
-    - **Access Token**: 1 minute lifespan, stored in memory/localStorage
-    - **Refresh Token**: 7 days lifespan, stored in httpOnly cookie
+- Helmet enabled; CSP disabled in dev
+- CORS configured with dynamic origin check against `ALLOWED_ORIGINS` (supports comma/whitespace separated list, strips quotes/trailing slashes)
+- Credentials enabled; cookies set with `SameSite=None` and `Secure` in production
+- `trust proxy` enabled for secure cookies behind proxies
 
-3. **Cookie Details:**
-    - **HttpOnly**: Cannot be accessed via JavaScript (XSS protection)
-    - **Secure**: Only sent over HTTPS in production
-    - **SameSite**: CSRF protection
-    - **Auto-transmitted**: Browser sends automatically with requests
+## Auth, Tokens, Sessions
 
-## API Endpoints
+- OTP login via email. On verify:
+    - Access token (exp: `SESSION_CONFIG.ACCESS_TOKEN_EXPIRY_MINUTES`)
+    - Refresh token (exp: `SESSION_CONFIG.REFRESH_TOKEN_EXPIRY_DAYS`) is stored as HttpOnly cookie and persisted in `refresh_tokens` table
+- Multiple concurrent sessions allowed (bounded by shared config); each device/session gets a distinct `sessionId`
+- Refresh flow reads cookie, validates JWT and DB row, rotates access token
+- Logout supports current device or all devices
+- Cleanup service runs hourly to purge expired refresh tokens
 
-### Authentication Routes
+Admin Elevation
 
-All auth routes are prefixed with `/api/auth`
+- POST `/api/auth/admin-elevation` accepts a SHA-256 hex of the admin password
+- On elevation: single-session lock (all other sessions revoked), Redis allowlist `admin:jti:{jti}` set with TTL, DB pointers stored on `User`
+- Admin token is short-lived; use in `X-Admin-Token` header for admin-only routes
+- Revocation via DELETE `/api/auth/admin-elevation` or automatic expiry; app emits `admin:revoked` realtime event to the user
 
-#### 1. **Send OTP** - `POST /api/auth/login`
+## Redis Keys
 
-Send OTP code to user's email for authentication.
+- Rate limits: `rl:{prefix}:{id}`
+- Presence: `presence:users` (set of userIds), `presence:user:{id}:count`
+- Admin: `user:{userId}:admin_elevation` (JSON), `admin:jti:{jti}`
+- Admin expirations: sorted set `admin:expirations` with member `${userId}:${sessionId}`
 
-**Request:**
+## Email & Queues
 
-```json
-{
-	"email": "user@example.com"
-}
+- BullMQ queues
+    - `otp` (priority 1, concurrency 5)
+    - `notification` (priority 2, concurrency 10)
+- SMTP transporter (SendGrid compatible). If `SEND_OUT_MAILS=false` or missing credentials, emails are logged to console via stream transport
+- If 587 times out on your host, use port 2525; for SSL on connect use 465 with `secure=true`
+
+## HTTP API
+
+All endpoints are under `/api`.
+
+Auth (`/api/auth`)
+
+- `POST /login` → send OTP
+- `POST /verify-otp` → verify, set cookie, return `{ user, accessToken }`
+- `POST /refresh` → new `{ accessToken }` (reads cookie)
+- `POST /logout` → `{ logoutAll?: boolean }`
+- `GET /me` → `{ user, session: { sessionId, expiresAt, isAdmin?, adminExpiresAt? } }`
+- `GET /devices` → list devices
+- `DELETE /devices/:sessionId` → logout a device
+- `POST /admin-elevation` → `{ adminToken, expiresAt }`
+- `DELETE /admin-elevation` → revoke
+
+Projects (`/api/projects`)
+
+- `GET /` → list projects (if authenticated user provided, includes flags `isSubscribed`, `hasMyTickets`, `subscriberCount`)
+- `POST /` (admin) → create project
+- `GET /:id` → get project
+- `GET /:id/subscribers` (admin) → list subscribers
+- `PATCH /:id` (admin) → update name/description
+- `POST /:id/subscribe` → subscribe current user; server also joins Socket.IO room
+- `DELETE /:id/subscribe` → unsubscribe (blocked if user has created or assigned tickets in this project)
+
+Tickets
+
+- `POST /projects/:projectId/tickets` → create ticket with audit; auto-subscribe creator; realtime `ticket:created`
+- `GET /projects/:projectId/tickets` → list tickets for a project
+- `GET /tickets/created` → tickets created by current user
+- `GET /tickets/assigned` → tickets assigned to current user
+- `GET /tickets/:ticketId` → detailed ticket
+- `PATCH /tickets/:ticketId` → update title/description; realtime `ticket:updated`
+- `PATCH /tickets/:ticketId/status` → change status; handles auto-assign/unassign; realtime `ticket:status` (+ `ticket:assignment` if assignee changed)
+- `PATCH /tickets/:ticketId/assignee` (admin) → change assignee; unassign forces status to PROPOSED with events
+- `PATCH /tickets/:ticketId/assignee-status` (admin) → combined change
+
+Comments
+
+- `POST /tickets/:ticketId/comments` (rate limited) → add comment
+- `GET /tickets/:ticketId/comments?limit=&cursor=` → paginated list
+
+Notifications
+
+- `GET /notifications?unreadOnly=true|false`
+- `POST /notifications/mark-all-read`
+
+Users (admin)
+
+- `GET /users` → list active users (requires admin elevation)
+
+## Realtime Events (Socket.IO)
+
+Auth: bearer access token in `auth: { token }` during connection. Rooms joined: `user:{userId}` and subscribed `project:{projectId}`.
+
+Emitted by server
+
+- `ticket:created` → `{ ticketId, ticketTitle, actorId, actorName }`
+- `ticket:updated` → `{ ticketId, ticketTitle, description, actorId, actorName }`
+- `ticket:status` → `{ ticketId, status, fromStatus, toStatus, actorId, actorName, ticketTitle }`
+- `ticket:assignment` → `{ ticketId, assignedToId, assignedToName, actorId, actorName, ticketTitle }`
+- `project:created` → `{ project, actorId, actorName, subscriberCount }`
+- `project:updated` → `{ project, actorId, actorName }`
+- `project:member:subscribed` / `project:member:unsubscribed` → `{ projectId, userId, subscriberCount }`
+- `project:subscribed` / `project:unsubscribed` → per-user confirmation events
+- `notification:new` → `{ id, message, createdAt, read }`
+- `admin:revoked` → `{ sessionId }`
+
+Client events
+
+- `subscribe` → `projectId` (joins room)
+- `unsubscribe` → `projectId` (leaves room)
+
+## Database Models (Prisma)
+
+See `apps/backend/prisma/schema.prisma` for details. Key enums and relations:
+
+- `TicketStatus`: PROPOSED, TODO, INPROGRESS, DONE, DEPLOYED
+- `UpdateType`: CREATED, UPDATED, STATUS_CHANGED, ASSIGNMENT_CHANGED, COMMENT
+- Relations: users ↔ projects (subscribers), tickets ↔ updates/comments, updates ↔ notifications
+
+![alt text](ERD.svg)
+
+## Running & Scripts
+
+```powershell
+npm run dev --workspace apps/backend     # dev server
+npm run build --workspace apps/backend   # build
+npm run start --workspace apps/backend   # start dist
+npx prisma migrate dev --schema=apps/backend/prisma/schema.prisma
+npx prisma studio --schema=apps/backend/prisma/schema.prisma
 ```
 
-**Response:**
+## Deployment Notes
 
-```json
-{
-	"message": "OTP sent to your email",
-	"otpSent": true
-}
-```
+- CORS: `ALLOWED_ORIGINS=https://your-frontend,http://localhost:5173` (no quotes, no trailing slash)
+- Cookies: `COOKIE_SAME_SITE=none`, `COOKIE_SECURE=true`, `trust proxy = 1`
+- SMTP connectivity: prefer port 2525 if 587 is blocked by the host; consider `requireTLS` and timeouts
 
-**Error Responses:**
+## Troubleshooting
 
-- `400` - Invalid email format
-- `400` - Rate limit exceeded (wait before requesting new OTP)
-- `500` - Failed to send OTP
-
----
-
-#### 2. **Verify OTP** - `POST /api/auth/verify-otp`
-
-Verify OTP code and create authenticated session.
-
-**Request:**
-
-```json
-{
-	"email": "user@example.com",
-	"otp": "123456",
-	"deviceInfo": {
-		"userAgent": "Mozilla/5.0 Chrome/91.0",
-		"deviceName": "MacBook Pro" // optional
-	}
-}
-```
-
-**Response:**
-
-```json
-{
-	"success": true,
-	"user": {
-		"id": "uuid",
-		"email": "user@example.com",
-		"username": "user1234",
-		"createdAt": "2025-11-03T...",
-		"updatedAt": "2025-11-03T..."
-	},
-	"accessToken": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
-
-**Cookies Set:**
-
-- `refreshToken` - HttpOnly, Secure, 7-day expiry
-
-**Error Responses:**
-
-- `400` - Invalid OTP or expired
-- `400` - Too many failed attempts
-- `400` - Invalid request format
-
----
-
-#### 3. **Refresh Token** - `POST /api/auth/refresh`
-
-Get new access token using refresh token cookie.
-
-**Request:**
-
-```
-// No body required - refresh token comes from cookie
-```
-
-**Response:**
-
-```json
-{
-	"accessToken": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
-
-**Error Responses:**
-
-- `401` - Missing refresh token cookie
-- `401` - Invalid or expired refresh token
-
----
-
-#### 4. **Logout** - `POST /api/auth/logout`
-
-Logout from current device or all devices.
-
-**Headers:**
-
-```
-Authorization: Bearer <access_token>
-```
-
-**Request:**
-
-```json
-{
-	"logoutAll": false // optional, default false
-}
-```
-
-**Response:**
-
-```json
-{
-	"message": "Logged out successfully",
-	"loggedOutDevices": 1
-}
-```
-
-**Cookies Cleared:**
-
-- `refreshToken` - Removed from browser
-
-**Error Responses:**
-
-- `401` - Authentication required
-- `401` - No active session found
-
----
-
-#### 5. **Get Devices** - `GET /api/auth/devices`
-
-Get list of all active devices/sessions for current user.
-
-**Headers:**
-
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-
-```json
-{
-	"devices": [
-		{
-			"id": "session-uuid",
-			"deviceName": "Chrome Browser",
-			"userAgent": "Mozilla/5.0...",
-			"ipAddress": "192.168.1.100",
-			"lastUsed": "2025-11-03T10:30:00Z",
-			"createdAt": "2025-11-01T08:15:00Z"
-		}
-	]
-}
-```
-
-**Error Responses:**
-
-- `401` - Authentication required
-
----
-
-#### 6. **Logout Device** - `DELETE /api/auth/devices/:sessionId`
-
-Logout from specific device/session.
-
-**Headers:**
-
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-
-```json
-{
-	"message": "Device logged out successfully",
-	"success": true
-}
-```
-
-**Error Responses:**
-
-- `401` - Authentication required
-- `404` - Device session not found
-- `400` - Invalid session ID
-
----
-
-#### 7. **Get Current User** - `GET /api/auth/me`
-
-Get current user information and session details.
-
-**Headers:**
-
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-
-```json
-{
-	"user": {
-		"id": "uuid",
-		"email": "user@example.com",
-		"username": "user1234"
-	},
-	"session": {
-		"sessionId": "session-uuid",
-		"expiresAt": "2025-11-03T11:00:00Z"
-	}
-}
-```
-
-**Error Responses:**
-
-- `401` - Authentication required
-
----
-
-### General Routes
-
-#### **Health Check** - `GET /api/health`
-
-Check server and database status.
-
-**Response:**
-
-```json
-{
-	"status": "OK",
-	"timestamp": "2025-11-03T10:30:00Z",
-	"environment": "development"
-}
-```
-
----
-
-## HTTP Status Codes
-
-### Success Codes (2xx)
-
-- `200 OK` - Request succeeded
-- `201 Created` - Resource created successfully
-
-### Client Error Codes (4xx)
-
-- `400 Bad Request` - Invalid request data
-- `401 Unauthorized` - Authentication required
-- `403 Forbidden` - Access denied
-- `404 Not Found` - Resource not found
-- `429 Too Many Requests` - Rate limit exceeded
-
-### Server Error Codes (5xx)
-
-- `500 Internal Server Error` - Server error
-- `503 Service Unavailable` - Service temporarily unavailable
-
----
-
-## Rate Limiting
-
-Authentication endpoints are protected with rate limiting:
-
-- **Login/OTP routes**: 5 attempts per 15 minutes per IP
-- **Window resets**: Automatically after time period
-- **Response**: 429 status with retry time
-
----
-
-## Security Features
-
-### Token Security
-
-- **Access tokens**: Short-lived (1 minute) to minimize exposure
-- **Refresh tokens**: HttpOnly cookies, cannot be accessed by JavaScript
-- **CSRF protection**: SameSite cookie attribute
-- **JWT signing**: Strong secret keys for token integrity
-
-### Request Security
-
-- **Helmet**: Security headers (CSP, XSS protection, etc.)
-- **CORS**: Configured for frontend origin only
-- **Input validation**: Zod schemas for all requests
-- **SQL injection**: Prisma ORM provides protection
-
-### Session Security
-
-- **Device tracking**: IP address, user agent, device name
-- **Session isolation**: Each device gets unique session ID
-- **Automatic cleanup**: Expired tokens removed hourly
-- **Graceful logout**: Proper session termination
-
----
-
-## Error Handling
-
-All API errors return consistent format:
-
-```json
-{
-	"error": "Human-readable error message",
-	"code": "MACHINE_READABLE_CODE",
-	"details": {} // Optional additional details
-}
-```
-
-### Common Error Codes
-
-- `VALIDATION_ERROR` - Request validation failed
-- `MISSING_TOKEN` - Authorization header missing
-- `INVALID_TOKEN` - Token format or signature invalid
-- `TOKEN_EXPIRED` - Token has expired
-- `RATE_LIMIT_EXCEEDED` - Too many requests
-- `INTERNAL_ERROR` - Server error
-
----
-
-## Database Schema
-
-### Key Models
-
-#### User
-
-```prisma
-model User {
-  id          String   @id @default(uuid())
-  email       String   @unique
-  username    String   @unique
-  isActive    Boolean  @default(true)
-  lastLoginAt DateTime?
-  // ... relations
-}
-```
-
-#### RefreshToken
-
-```prisma
-model RefreshToken {
-  id          String   @id @default(uuid())
-  token       String   @unique
-  userId      String
-  sessionId   String
-  deviceName  String?
-  userAgent   String
-  ipAddress   String
-  expiresAt   DateTime
-  lastUsed    DateTime
-  // ... relations
-}
-```
-
-#### OtpCode
-
-```prisma
-model OtpCode {
-  id        String   @id @default(uuid())
-  email     String
-  code      String
-  userId    String?
-  attempts  Int      @default(0)
-  isUsed    Boolean  @default(false)
-  expiresAt DateTime
-  // ... relations
-}
-```
-
----
-
-## Development
-
-### Scripts
-
-```bash
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run start        # Start production server
-npm run check-types  # TypeScript type checking
-npm run clean        # Clean build artifacts
-```
-
-### Database Operations
-
-```bash
-npx prisma migrate dev    # Run migrations
-npx prisma generate      # Generate client
-npx prisma studio        # Open database GUI
-npx prisma db push       # Push schema changes
-```
-
----
-
-## Deployment
-
-### Environment Setup
-
-1. Set production environment variables
-2. Run database migrations
-3. Build the application
-4. Start the server
-
-### Health Monitoring
-
-- **Health endpoint**: `/api/health` for load balancer checks
-- **Cleanup service**: Automatic token cleanup every hour
-- **Error logging**: Console logging (integrate with your monitoring)
-
----
-
-## Frontend Integration
-
-### Cookie Handling
-
-```javascript
-// Cookies are handled automatically by browser
-// No manual management needed for refresh tokens
-
-// API calls with access token
-fetch("/api/protected", {
-	headers: {
-		Authorization: `Bearer ${accessToken}`,
-	},
-	credentials: "include", // Include cookies
-});
-```
-
-### Token Refresh Flow
-
-```javascript
-// When access token expires, call refresh endpoint
-const refreshResponse = await fetch("/api/auth/refresh", {
-	method: "POST",
-	credentials: "include", // Send refresh token cookie
-});
-
-if (refreshResponse.ok) {
-	const { accessToken } = await refreshResponse.json();
-	// Update stored access token and retry original request
-}
-```
-
-This completes the comprehensive authentication system for the Ticket Dashboard backend! 🚀
-
----
-
-## Admin Elevation (Temporary Admin Access)
-
-Temporary admin privileges let an authenticated user elevate to an admin scope for a short period without changing their base role. This is designed for sensitive actions behind admin-only routes with clear auditability and instant revocation.
-
-### Overview
-
-- Duration: 15 minutes by default (see `packages/shared/src/auth/constants.ts`)
-- Token: A short-lived admin JWT returned on elevation; send it via `X-Admin-Token` header for admin-only APIs
-- Allowlist: Admin JWT jti is allowlisted in Redis for instant revoke/expiry
-- Single-session rule: While elevated, the user can use only the current session; all other sessions are revoked and new logins are blocked until elevation ends
-- Audit trail: All elevations and revocations are recorded in the `AdminElevation` table with device and timing metadata
-
-### Lifecycle
-
-1. Elevation request (POST `/api/auth/admin-elevation`)
-    - Validates admin password
-    - Ensures there is no active elevation on another session
-    - Revokes all other sessions for the user except the current session
-    - Creates an `AdminElevation` record and sets pointers on the `User` to the elevated session and expiry
-    - Returns `{ adminToken, expiresAt }`
-
-### Admin Password Handling (Client-side hash)
-
-To avoid sending the raw admin password over the wire, the client hashes the password using SHA-256 and sends the lowercase hex string. The server derives the same SHA-256 hash from the plaintext password stored in `.env` and compares hashes only.
-
-Configuration:
-
-- `.env`: `ADMIN_PASSWORD="<plaintext password>"`
-- `config/env.ts`: exposes `ADMIN_PASSWORD_HASH` computed via Node's `crypto.createHash('sha256')`
-- `POST /api/auth/admin-elevation` expects `{ password: "<sha256-hex>" }`
-
-Notes:
-
-- Use HTTPS in production. Hashing does not replace transport security.
-- There is no salt here since the admin password is a single shared secret, not a user-stored credential. Hashing is for wire minimization, not storage-hardening.
-- Rotate `ADMIN_PASSWORD` periodically and after suspected leaks.
-
-2. Using admin routes
-    - Send `Authorization: Bearer <access_token>` as usual
-    - Include `X-Admin-Token: Bearer <admin_token>` for admin-only endpoints
-    - Middleware validates admin token, Redis allowlist, and server state
-
-3. Revocation (DELETE `/api/auth/admin-elevation`)
-    - Marks the elevation as revoked and clears server state pointers
-    - Removes jti from Redis allowlist to instantly invalidate the admin token
-
-4. Expiry
-    - After 15 minutes, elevation expires automatically
-    - Login attempts from other devices are allowed again
-
-### Single-Session Rule
-
-- On successful elevation, all other sessions for the user are logged out
-- While elevation is active, any new login attempts are blocked with `ADMIN_ELEVATION_ACTIVE`
-- The elevated state is bound to the current `sessionId` and enforced in middleware
-
-### Current User Introspection
-
-`GET /api/auth/me` includes session information to support clients:
-
-```json
-{
-	"user": {
-		"id": "uuid",
-		"email": "user@example.com",
-		"username": "user1234"
-	},
-	"session": {
-		"sessionId": "session-uuid",
-		"expiresAt": "2025-11-03T11:00:00Z",
-		"isAdmin": true,
-		"adminExpiresAt": "2025-11-03T10:45:00Z"
-	}
-}
-```
-
-### Middleware Usage
-
-Two helpers are provided in `src/middleware/auth.middleware.ts`:
-
-- `attachAdminStatus` – optional helper that inspects `X-Admin-Token`, Redis allowlist, and server state to set `req.isAdmin = true|false`
-- `ensureAdmin` – guard that enforces admin-only access (responds 401 if unauthenticated, 403 if not elevated)
-
-Example route protection:
-
-```ts
-import {
-	authenticateToken,
-	attachAdminStatus,
-	ensureAdmin,
-} from "../middleware/auth.middleware.js";
-
-router.get(
-	"/admin/metrics",
-	authenticateToken,
-	attachAdminStatus, // optional; ensureAdmin will attach if missing
-	ensureAdmin,
-	MetricsController.get
-);
-```
-
-### Headers Recap
-
-- Access token: `Authorization: Bearer <access_token>`
-- Admin token: `X-Admin-Token: Bearer <admin_token>`
-
-If the admin token is missing or invalid, admin-only routes will return `403 Forbidden`.
+- CORS preflight blocked: origin mismatch; check logs printed on boot for `Configured ALLOWED_ORIGINS`
+- Refresh failing: ensure cookies are set with `SameSite=None; Secure` and the frontend uses `credentials: 'include'`
+- Emails timing out: switch to port 2525 on SendGrid; verify egress rules; confirm sender identity
