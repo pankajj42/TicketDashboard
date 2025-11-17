@@ -21,6 +21,14 @@ const app = express();
 
 // Security middleware
 app.set("trust proxy", 1); // needed for secure cookies behind proxy/CDN
+// Debug CORS origins on startup (remove or silence later)
+console.log("Configured ALLOWED_ORIGINS:", config.ALLOWED_ORIGINS);
+console.log(
+	"NODE_ENV:",
+	config.NODE_ENV,
+	"COOKIE_SECURE:",
+	config.COOKIE_SECURE
+);
 app.use(
 	helmet({
 		contentSecurityPolicy: config.isDevelopment ? false : undefined,
@@ -32,15 +40,20 @@ app.use(
 		origin: (origin, cb) => {
 			// allow non-browser requests (no Origin header)
 			if (!origin) return cb(null, true);
+			// normalize incoming origin (strip trailing slash)
+			const normalizedOrigin = origin.replace(/\/$/, "");
 			// allow if explicitly listed
 			if (
 				Array.isArray(config.ALLOWED_ORIGINS) &&
-				config.ALLOWED_ORIGINS.includes(origin)
+				config.ALLOWED_ORIGINS.includes(normalizedOrigin)
 			) {
 				return cb(null, true);
 			}
 			// allow localhost during development for convenience
-			if (config.isDevelopment && origin.startsWith("http://localhost")) {
+			if (
+				config.isDevelopment &&
+				normalizedOrigin.startsWith("http://localhost")
+			) {
 				return cb(null, true);
 			}
 			return cb(new Error("Not allowed by CORS"));

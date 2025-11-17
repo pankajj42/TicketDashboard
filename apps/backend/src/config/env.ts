@@ -11,10 +11,13 @@ dotenv.config();
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 const rawOrigins = process.env.ALLOWED_ORIGINS || process.env.CLIENT_URL || "";
+// Normalize configured origins: split by comma/whitespace, trim, strip quotes and trailing slashes
 const ALLOWED_ORIGINS = rawOrigins
-	.split(",")
+	.split(/[\s,]+/)
 	.map((s) => s.trim())
-	.filter(Boolean);
+	.filter(Boolean)
+	.map((s) => s.replace(/^['"]+|['"]+$/g, ""))
+	.map((s) => s.replace(/\/$/, ""));
 const COOKIE_SECURE =
 	(process.env.COOKIE_SECURE ??
 		(NODE_ENV === "production" ? "true" : "false")) === "true";
