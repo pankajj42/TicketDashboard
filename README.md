@@ -71,8 +71,6 @@ classDiagram
 	TicketUpdate "1" --> "*" Notification
 ```
 
-![alt text](apps/backend/ERD.svg)
-
 Key flows:
 
 - Passwordless login → OTP email → access JWT (short) + refresh cookie (long)
