@@ -150,6 +150,17 @@ Frontend static site:
 - BullMQ queues for email (OTP / notifications) with priorities and retries
 - Socket.IO with Redis adapter to enable horizontal scalability across instances
 
+### Design Patterns Used
+
+- Factory Method: `EmailService.getTransporter()` picks real SMTP vs. stream transporter based on env (`apps/backend/src/services/email.service.ts`).
+- Strategy: Swappable rate limiters expose the same middleware shape — in-memory `createAuthRateLimit` vs Redis-backed `createRedisRateLimit` (`apps/backend/src/middleware/auth.middleware.ts`).
+- Singleton: Shared instances for `prisma` (`apps/backend/src/lib/prisma.ts`), `redis` (`apps/backend/src/lib/redis.ts`), queue manager `queue` (`apps/backend/src/services/queue.service.ts`), and `Realtime` socket server holder (`apps/backend/src/services/realtime.service.ts`).
+- Repository: `BaseRepository` and concrete repositories encapsulate data access (`apps/backend/src/repositories/*.repository.ts`).
+- Adapter: Socket.IO Redis adapter bridges process-local sockets to cluster-wide pub/sub (`@socket.io/redis-adapter`, wired in `apps/backend/src/services/realtime.service.ts`).
+- Mapper/DTO: `UserMapper` and `DeviceMapper` convert Prisma entities to API-safe shapes (`apps/backend/src/mappers/api.mappers.ts`).
+- Facade: `ErrorHandler` and `ResponseHelper` centralize HTTP error/response concerns (`apps/backend/src/utils/*.ts`).
+- Command/Queue: BullMQ jobs represent commands processed by workers (`apps/backend/src/services/queue.service.ts`).
+
 ## Where to Read More
 
 - Backend API, models, CORS, sessions, admin elevation, realtime, queues: `apps/backend/README.md`

@@ -56,6 +56,17 @@ Note: In production set `COOKIE_SECURE=true`, keep `SAME_SITE=none`, and configu
     - `user:{userId}` for per-user events (notifications, admin revoke)
     - `project:{projectId}` for ticket events within a project
 
+### Design Patterns Used
+
+- Factory Method: `EmailService.getTransporter()` constructs either a real SMTP transporter or a stream/mock transporter depending on env flags (`src/services/email.service.ts`).
+- Strategy: Two interchangeable rate-limiting middlewares — in-memory `createAuthRateLimit` and Redis-backed `createRedisRateLimit` — share the same Express middleware contract (`src/middleware/auth.middleware.ts`).
+- Singleton: One instance per process for `prisma` (`src/lib/prisma.ts`), `redis` (`src/lib/redis.ts`), `QueueManager` exported as `queue` (`src/services/queue.service.ts`), and `Realtime` static socket server (`src/services/realtime.service.ts`).
+- Repository: `BaseRepository` with `user`, `project`, `ticket`, `comment`, `notification`, `session`, `admin` concrete repositories encapsulate Prisma queries (`src/repositories/*.repository.ts`).
+- Adapter: Socket.IO Redis adapter integrates Socket.IO with Redis pub/sub for horizontal scale (`@socket.io/redis-adapter`, wired in `src/services/realtime.service.ts`).
+- Mapper/DTO: `UserMapper` and `DeviceMapper` convert Prisma models to API response DTOs (`src/mappers/api.mappers.ts`).
+- Facade: `ErrorHandler` and `ResponseHelper` provide a thin facade for consistent HTTP error and response handling (`src/utils/*.ts`).
+- Command/Queue: BullMQ jobs (`otp`, `notification`) act as commands consumed by workers with retries and priorities (`src/services/queue.service.ts`).
+
 ## Security & CORS
 
 - Helmet enabled; CSP disabled in dev
