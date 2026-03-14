@@ -87,7 +87,48 @@ Key flows:
 
 ## Local Development
 
-Prerequisites: Node 18+, PostgreSQL, Redis
+### Option 1: Docker (Recommended)
+
+**Prerequisites:** Docker, Docker Compose
+
+```powershell
+# 1. Start all services (postgres, redis, mailhog, backend, frontend)
+#    Uses sensible defaults: postgres → localhost:5432, redis → localhost:6379, mailhog → smtp on :1025
+docker-compose up -d
+
+# 2. Run migrations
+docker-compose exec backend npx prisma migrate deploy
+```
+
+To override defaults (e.g., change JWT secrets or admin password), create `.env` files and reference them in `docker-compose.yml`, or pass env vars directly to `docker-compose up -d`.
+
+Access:
+- Frontend: http://localhost:3000
+- Backend: http://localhost:3001
+- Emails (MailHog UI): http://localhost:8025
+- Postgres: localhost:5432
+- Redis: localhost:6379
+
+Useful commands:
+```powershell
+# View logs
+docker-compose logs -f backend
+
+# Database UI
+docker-compose exec backend npx prisma studio
+
+# Stop services
+docker-compose down
+
+# Stop and remove data
+docker-compose down -v
+```
+
+MailHog catches all outgoing emails and displays them at http://localhost:8025 (no real SMTP needed for local dev). For production, update SMTP credentials in `apps/backend/.env`.
+
+### Option 2: Local Services
+
+**Prerequisites:** Node 18+, PostgreSQL, Redis
 
 1. Install deps
 

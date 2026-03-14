@@ -1,0 +1,111 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17-alpine
+    container_name: ticket_dashboard_postgres
+    environment:
+      POSTGRES_USER: ticketuser
+      POSTGRES_PASSWORD: ticketpassword
+      POSTGRES_DB: ticketdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketuser"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticket_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: ticket_dashboard_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticket_network
+
+  # MailHog - Local SMTP Service (for development)
+  # Catches all emails and displays them in a web UI
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ticket_dashboard_mailhog
+    ports:
+      - "1025:1025"  # SMTP port
+      - "8025:8025"  # Web UI port
+    networks:
+      - ticket_network
+
+  # Backend API Server
+  backend:
+    build:
+      context: .
+      dockerfile: ./apps/backend/Dockerfile
+    container_name: ticket_dashboard_backend
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://ticketuser:ticketpassword@postgres:5432/ticketdb
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your_jwt_secret_change_me
+      JWT_REFRESH_SECRET: your_jwt_refresh_secret_change_me
+      ADMIN_JWT_SECRET: your_admin_jwt_secret_change_me
+      ADMIN_PASSWORD: admin123
+      COOKIE_SECURE: "false"
+      ALLOWED_ORIGINS: http://localhost:3000
+      CLIENT_URL: http://localhost:3000
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      FROM_EMAIL: noreply@localhost
+    ports:
+      - "3001:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/backend:/app/apps/backend
+      - /app/apps/backend/node_modules
+      - /app/node_modules
+    command: sh -c "cd /app/apps/backend && npx prisma generate && npx prisma migrate deploy && npm run build && node dist/index.js"
+    networks:
+      - ticket_network
+    restart: unless-stopped
+
+  # Frontend Web Server
+  frontend:
+    build:
+      context: .
+      dockerfile: ./apps/frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
+    container_name: ticket_dashboard_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - ticket_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ticket_network:
+    driver: bridge

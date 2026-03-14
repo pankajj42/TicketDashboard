@@ -1,0 +1,17 @@
+# Root level .dockerignore
+.git
+.gitignore
+.DS_Store
+.vscode
+.idea
+node_modules
+npm-debug.log
+dist
+.turbo
+coverage
+.nyc_output
+*.md
+.env
+.env*.local
+.turbo
+console.log
