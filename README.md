@@ -117,12 +117,42 @@ docker-compose logs -f backend
 # Database UI
 docker-compose exec backend npx prisma studio
 
+# Seed data in running containers
+docker-compose exec backend npm run seed
+
 # Stop services
 docker-compose down
 
 # Stop and remove data
 docker-compose down -v
 ```
+
+### Seed data
+
+For local seeding in backend service (CLI):
+
+```powershell
+cd apps/backend
+npm run seed
+```
+
+The seeder runs only when `SEED_ON_START=true` or when you use `--seed` in the script. The docker-compose setup already runs `npm run seed` by default in the backend startup command.
+
+To run migrations + seed manually:
+
+```powershell
+docker-compose exec backend npx prisma migrate deploy
+docker-compose exec backend npm run seed
+```
+
+You can clear and reseed from scratch with:
+
+```powershell
+docker-compose down -v
+docker-compose up --build -d
+docker-compose exec backend npm run seed
+```
+
 
 MailHog catches all outgoing emails and displays them at http://localhost:8025 (no real SMTP needed for local dev). For production, update SMTP credentials in `apps/backend/.env`.
 

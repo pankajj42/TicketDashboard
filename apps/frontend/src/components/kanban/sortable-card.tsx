@@ -46,7 +46,7 @@ export default function SortableCard({
 			animate={{ opacity: 1, y: 0 }}
 			exit={{ opacity: 0, scale: 0.98 }}
 			aria-disabled={disabled}
-			className="group relative bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-3 mb-3 hover:shadow-md hover:bg-gray-50 dark:hover:bg-gray-750 hover:scale-[1.02] transition-all duration-200 border border-gray-300 dark:border-gray-700"
+			className="group relative bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-3 mb-3 hover:shadow-md hover:bg-gray-50 dark:hover:bg-gray-750 hover:scale-[1.02] hover:z-10 origin-top transition-all duration-200 border border-gray-300 dark:border-gray-700"
 			// Drag attributes/listeners are moved to the dedicated handle
 			onClick={() => (!disabled ? onOpen?.(item.id) : undefined)}
 		>

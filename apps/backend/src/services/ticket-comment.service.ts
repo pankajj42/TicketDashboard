@@ -26,7 +26,7 @@ export class TicketCommentService {
 				actorName = u?.username || u?.email || "someone";
 			} catch {}
 			const snippet = body.slice(0, 140);
-			const message = `Comment by ${actorName} on ${t.title}: ${snippet}`;
+			const message = `Comment by ${actorName} on ${t.ticketTitle}: ${snippet}`;
 			await NotificationRepository.createMany(
 				subs.map((s) => ({
 					recipientId: s.id,
@@ -53,7 +53,7 @@ export class TicketCommentService {
 				actorId: userId,
 				actorName,
 				createdAt: result.comment.createdAt,
-				ticketTitle: t.title,
+				ticketTitle: t.ticketTitle,
 			});
 		}
 		return result.comment;

@@ -181,7 +181,7 @@ export function AppSidebar() {
 											) : (
 												<FolderDot className="opacity-50" />
 											)}
-											<span>{p.name}</span>
+										<span className="break-words whitespace-normal">{p.name}</span>
 											<span className="ml-auto flex items-center">
 												<button
 													title={

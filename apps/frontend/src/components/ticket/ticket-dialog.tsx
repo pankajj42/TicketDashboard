@@ -493,7 +493,7 @@ export default function TicketDialog({ ticketId, onClose }: Props) {
 											</div>
 											<div className="flex items-center gap-2">
 												<select
-													className="border rounded px-2 py-1 text-sm min-w-40"
+													className="border rounded px-2 py-1 text-sm min-w-40 bg-white text-black dark:bg-gray-700 dark:text-white dark:border-gray-600"
 													value={selectedAssigneeId}
 													onChange={(e) =>
 														setSelectedAssigneeId(
