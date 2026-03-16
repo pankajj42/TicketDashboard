@@ -49,13 +49,8 @@ const config = {
 		.digest("hex"),
 
 	REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
-
-	SMTP_USER: process.env.SMTP_USER || "apikey",
-	SMTP_PASS: process.env.SMTP_PASS || "default_smtp_pass",
-	SMTP_HOST: process.env.SMTP_HOST || "smtp.example.com",
-	SMTP_PORT: parseInt(process.env.SMTP_PORT || "587"),
+	
 	FROM_EMAIL: process.env.FROM_EMAIL || "<sender@email.com>",
-
 	BREVO_API_KEY: process.env.BREVO_API_KEY || "",
 	BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME || "TicketDash",
 	BREVO_API_URL:
