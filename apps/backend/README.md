@@ -33,11 +33,15 @@ ADMIN_JWT_SECRET=dev_admin_secret
 ADMIN_PASSWORD=admin123
 
 SEND_OUT_MAILS=false
+BREVO_API_KEY=***
+BREVO_SENDER_NAME="TicketDash"
+FROM_EMAIL="TicketDash <noreply@yourdomain.com>"
+
+# legacy SMTP settings still accepted for fallback/mock path (not used by Brevo provider)
 SMTP_HOST=smtp.sendgrid.net
 SMTP_PORT=587
 SMTP_USER=apikey
 SMTP_PASS=***
-FROM_EMAIL="TicketDash <noreply@yourdomain.com>"
 
 ALLOWED_ORIGINS=http://localhost:5173
 COOKIE_SAME_SITE=none
@@ -58,7 +62,7 @@ Note: In production set `COOKIE_SECURE=true`, keep `SAME_SITE=none`, and configu
 
 ### Design Patterns Used
 
-- Factory Method: `EmailService.getTransporter()` constructs either a real SMTP transporter or a stream/mock transporter depending on env flags (`src/services/email.service.ts`).
+- HTTP adapter: `EmailService` now sends transactional messages through Brevo Messaging API (`src/services/email.service.ts`) and falls back to console log when `SEND_OUT_MAILS=false` or `BREVO_API_KEY` is missing.
 - Strategy: Two interchangeable rate-limiting middlewares — in-memory `createAuthRateLimit` and Redis-backed `createRedisRateLimit` — share the same Express middleware contract (`src/middleware/auth.middleware.ts`).
 - Singleton: One instance per process for `prisma` (`src/lib/prisma.ts`), `redis` (`src/lib/redis.ts`), `QueueManager` exported as `queue` (`src/services/queue.service.ts`), and `Realtime` static socket server (`src/services/realtime.service.ts`).
 - Repository: `BaseRepository` with `user`, `project`, `ticket`, `comment`, `notification`, `session`, `admin` concrete repositories encapsulate Prisma queries (`src/repositories/*.repository.ts`).

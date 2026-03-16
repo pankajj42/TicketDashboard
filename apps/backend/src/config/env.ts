@@ -56,6 +56,11 @@ const config = {
 	SMTP_PORT: parseInt(process.env.SMTP_PORT || "587"),
 	FROM_EMAIL: process.env.FROM_EMAIL || "<sender@email.com>",
 
+	BREVO_API_KEY: process.env.BREVO_API_KEY || "",
+	BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME || "TicketDash",
+	BREVO_API_URL:
+		process.env.BREVO_API_URL || "https://api.brevo.com/v3/smtp/email",
+
 	// Frontend/Origins
 	CLIENT_URL: process.env.CLIENT_URL,
 	ALLOWED_ORIGINS,

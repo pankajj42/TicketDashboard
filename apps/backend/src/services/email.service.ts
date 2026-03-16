@@ -1,77 +1,84 @@
-import nodemailer from "nodemailer";
 import config from "../config/env.js";
 
-export class EmailService {
-	private static transporter: nodemailer.Transporter | null = null;
+const BREVO_ENDPOINT = config.BREVO_API_URL;
 
-	private static async getTransporter(): Promise<nodemailer.Transporter> {
-		if (this.transporter) {
-			return this.transporter;
-		}
+function isMailSendingEnabled(): boolean {
+	return (
+		config.sendOutMails &&
+		Boolean(config.BREVO_API_KEY) &&
+		Boolean(config.FROM_EMAIL)
+	);
+}
 
-		// Check if we should send real emails or just log to console
-		if (!config.sendOutMails || !config.SMTP_USER || !config.SMTP_PASS) {
-			console.log(
-				"Emails will be logged to console (SEND_OUT_MAILS=false or missing SMTP config)."
-			);
+function getSender() {
+	return {
+		name: config.BREVO_SENDER_NAME,
+		email: config.FROM_EMAIL,
+	};
+}
 
-			this.transporter = nodemailer.createTransport({
-				streamTransport: true,
-				newline: "unix",
-				buffer: true,
-			});
-		} else {
-			console.log(
-				"Configuring real SMTP transporter (SEND_OUT_MAILS=true)."
-			);
-			this.transporter = nodemailer.createTransport({
-				host: config.SMTP_HOST,
-				port: config.SMTP_PORT,
-				secure: config.SMTP_PORT === 465,
-				auth: {
-					user: config.SMTP_USER,
-					pass: config.SMTP_PASS,
-				},
-			});
-		}
+async function sendToBrevo(payload: Record<string, unknown>) {
+	const response = await fetch(BREVO_ENDPOINT, {
+		method: "POST",
+		headers: {
+			"accept": "application/json",
+			"content-type": "application/json",
+			"api-key": config.BREVO_API_KEY,
+		},
+		body: JSON.stringify(payload),
+	});
 
-		return this.transporter;
+	let responseJson;
+	try {
+		responseJson = await response.json();
+	} catch (err) {
+		throw new Error(`Brevo response parsing failed: ${err}`);
 	}
 
+	if (!response.ok) {
+		const errorMessage = responseJson?.message || responseJson || response.statusText;
+		throw new Error(`Brevo email send failed (${response.status}): ${errorMessage}`);
+	}
+
+	return responseJson;
+}
+
+export class EmailService {
 	static async sendOtpEmail(email: string, otp: string): Promise<void> {
+		const mailPayload = {
+			sender: getSender(),
+			to: [
+				{
+					email,
+					name: email,
+				},
+			],
+			subject: "Your TicketDash OTP",
+			htmlContent: `
+				<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+					<h2 style="color: #333;">TicketDash Login</h2>
+					<p>Your One-Time Password (OTP) for login is:</p>
+					<div style="background: #f4f4f4; padding: 15px; border-radius: 5px; text-align: center; font-size: 24px; letter-spacing: 5px; margin: 20px 0;">
+						<strong>${otp}</strong>
+					</div>
+					<p>This OTP will expire in ${config.OTP_EXPIRY_MINUTES} minute${
+						config.OTP_EXPIRY_MINUTES === 1 ? "" : "s"
+					}.</p>
+					<p>If you didn't request this OTP, please ignore this email.</p>
+				</div>
+			`,
+		};
+
+		if (!isMailSendingEnabled()) {
+			console.log("📧 Email sending disabled; OTP email payload:", mailPayload);
+			return;
+		}
+
 		try {
-			const transporter = await this.getTransporter();
-
-			const mailOptions = {
-				from: config.FROM_EMAIL,
-				to: email,
-				subject: "Your TicketDash OTP",
-				html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">TicketDash Login</h2>
-            <p>Your One-Time Password (OTP) for login is:</p>
-            <div style="background: #f4f4f4; padding: 15px; border-radius: 5px; text-align: center; font-size: 24px; letter-spacing: 5px; margin: 20px 0;">
-              <strong>${otp}</strong>
-            </div>
-            <p>This OTP will expire in ${config.OTP_EXPIRY_MINUTES} minute${config.OTP_EXPIRY_MINUTES === 1 ? "" : "s"}.</p>
-            <p>If you didn't request this OTP, please ignore this email.</p>
-          </div>
-        `,
-			};
-
-			const info = await transporter.sendMail(mailOptions);
-
-			if (config.sendOutMails && config.SMTP_USER && config.SMTP_PASS) {
-				console.log(`✅ OTP email sent successfully to ${email}`);
-			} else {
-				console.log(`📧 OTP email (mock) for ${email}: ${otp}`);
-				console.log(
-					"Email content:",
-					info.message?.toString() || "Email prepared but not sent"
-				);
-			}
+			const result = await sendToBrevo(mailPayload);
+			console.log(`✅ OTP email sent successfully to ${email}. messageId=${result.messageId || "unknown"}`);
 		} catch (error) {
-			console.error("Error sending OTP email:", error);
+			console.error("Error sending OTP email via Brevo:", error);
 			throw new Error("Failed to send OTP email");
 		}
 	}
@@ -81,42 +88,38 @@ export class EmailService {
 		subject: string,
 		message: string
 	): Promise<void> {
+		const mailPayload = {
+			sender: getSender(),
+			to: [
+				{
+					email,
+					name: email,
+				},
+			],
+			subject: `TicketDash: ${subject}`,
+			htmlContent: `
+				<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+					<h2 style="color: #333;">${subject}</h2>
+					<div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+						${message}
+					</div>
+					<p>You're receiving this email because you're subscribed to updates from TicketDash.</p>
+				</div>
+			`,
+		};
+
+		if (!isMailSendingEnabled()) {
+			console.log("📧 Email sending disabled; notification email payload:", mailPayload);
+			return;
+		}
+
 		try {
-			const transporter = await this.getTransporter();
-
-			const mailOptions = {
-				from: config.FROM_EMAIL,
-				to: email,
-				subject: `TicketDash: ${subject}`,
-				html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">${subject}</h2>
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              ${message}
-            </div>
-            <p>You're receiving this email because you're subscribed to updates from TicketDash.</p>
-          </div>
-        `,
-			};
-
-			const info = await transporter.sendMail(mailOptions);
-
-			if (config.sendOutMails && config.SMTP_USER && config.SMTP_PASS) {
-				console.log(
-					`✅ Notification email sent successfully to ${email}`
-				);
-			} else {
-				console.log(
-					`📧 Notification email (mock) for ${email}: ${subject}`
-				);
-				console.log(
-					"Email content:",
-					info.message?.toString() || "Email prepared but not sent"
-				);
-			}
+			const result = await sendToBrevo(mailPayload);
+			console.log(`✅ Notification email sent successfully to ${email}. messageId=${result.messageId || "unknown"}`);
 		} catch (error) {
-			console.error("Error sending notification email:", error);
+			console.error("Error sending notification email via Brevo:", error);
 			throw new Error("Failed to send notification email");
 		}
 	}
 }
+
